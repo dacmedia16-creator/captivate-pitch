@@ -45,6 +45,7 @@ export default function AgentNewPresentation() {
   const [marketData, setMarketData] = useState<MarketStudyData>(emptyMarket);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+  const [generationDone, setGenerationDone] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const createdIdRef = useRef<string | null>(null);
 
