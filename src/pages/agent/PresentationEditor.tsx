@@ -7,6 +7,7 @@ import { SlidesSidebar } from "@/components/editor/SlidesSidebar";
 import { EditPanel } from "@/components/editor/EditPanel";
 import { EditorToolbar } from "@/components/editor/EditorToolbar";
 import { SectionRenderer, SectionData } from "@/components/layouts/SectionRenderer";
+import { ScaledSlide } from "@/components/layouts/ScaledSlide";
 import { PresentationEditorSkeleton } from "@/components/skeletons/PresentationEditorSkeleton";
 import { toast } from "sonner";
 import { logAudit } from "@/hooks/useAuditLog";
@@ -153,11 +154,15 @@ export default function PresentationEditor() {
       <div className="flex flex-1 overflow-hidden">
         <SlidesSidebar sections={localSections} selectedId={selectedId} onSelect={setSelectedId} onToggleVisibility={toggleVisibility} />
         <div className="flex-1 overflow-y-auto subtle-grid-bg p-8 flex items-start justify-center">
-          <div className="w-full max-w-3xl slide-frame rounded-xl bg-white">
+          <div className="w-full max-w-4xl">
             {selected ? (
-              <SectionRenderer section={selected} layout={presentation?.selected_layout || "executivo"} branding={branding || undefined} />
+              <ScaledSlide className="slide-frame rounded-xl bg-white">
+                <SectionRenderer section={selected} layout={presentation?.selected_layout || "executivo"} branding={branding || undefined} />
+              </ScaledSlide>
             ) : (
-              <p className="text-muted-foreground text-center p-12">Nenhum slide selecionado</p>
+              <div className="aspect-video flex items-center justify-center bg-white rounded-xl slide-frame">
+                <p className="text-muted-foreground text-center">Nenhum slide selecionado</p>
+              </div>
             )}
           </div>
         </div>
