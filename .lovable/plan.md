@@ -1,28 +1,21 @@
 
 
-# Fix: Foto Duplicada no about_regional
+# Fix: Imagens cortadas nos slides institucionais
 
 ## Problema
-No `about_regional`, `c.image_url` e `c.branch_photo_url` são renderizados simultaneamente. Quando ambos existem, aparecem duas fotos (frequentemente a mesma).
+As fotos nos slides `about_global`, `about_national` e `about_regional` usam `object-cover` com `max-h-56`, o que corta a imagem. O usuário quer ver a foto inteira, adaptando o tamanho.
 
 ## Solução
-Usar lógica de prioridade: exibir apenas **uma** imagem. Se `branch_photo_url` existir, usá-la como imagem principal no grid. Se não, usar `image_url`. Nunca exibir ambas.
+Trocar `object-cover` por `object-contain` e remover `max-h-56` fixo, usando altura flexível para que a imagem se adapte ao espaço disponível.
 
 ## Arquivos a alterar
 
-| Arquivo | Mudança |
-|---|---|
-| `src/components/layouts/LayoutExecutivo.tsx` | Linha ~336-340: Unificar `image_url` e `branch_photo_url` em uma única variável `displayImage = c.branch_photo_url \|\| c.image_url`. Renderizar apenas uma vez. |
-| `src/components/layouts/LayoutPremium.tsx` | Mesma lógica. |
-| `src/components/layouts/LayoutImpactoComercial.tsx` | Mesma lógica. |
-
-## Lógica
-```typescript
-const displayImage = c.branch_photo_url || c.image_url;
-// Renderizar displayImage uma única vez no grid (ao lado do texto)
-// Remover a renderização separada de branch_photo_url abaixo
-```
+| Arquivo | Linha | Mudança |
+|---|---|---|
+| `LayoutExecutivo.tsx` | 341 | `className="max-h-56 object-cover w-full rounded-lg"` → `className="w-full object-contain rounded-lg"` |
+| `LayoutPremium.tsx` | 338 | Idem |
+| `LayoutImpactoComercial.tsx` | 329 | Idem |
 
 ## Risco
-Nenhum — apenas elimina duplicação visual. Apresentações sem fotos ou com apenas uma continuam inalteradas.
+Nenhum — apenas ajuste visual CSS.
 
