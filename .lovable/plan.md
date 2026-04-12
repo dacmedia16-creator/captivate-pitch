@@ -1,47 +1,64 @@
 
 
-# Integrar Manus AI para Estudo de Mercado
+# Corrigir integração Manus AI — API v2 correta + prompt detalhado por portal
 
-## Visão geral
-Substituir o motor atual (Firecrawl + Lovable AI) pelo Manus AI como agente autônomo de pesquisa de mercado. O Manus recebe uma tarefa descritiva, navega portais, coleta dados e retorna resultados completos.
+## Problema atual
+A edge function `analyze-market-manus` tem vários erros em relação à API real do Manus:
+- URL errada (`/v1/tasks` em vez de `/v2/task.create`)
+- Autenticação errada (`Authorization: Bearer` em vez de `x-manus-api-key`)
+- Formato de request errado (campo `prompt` em vez de `message.content`)
+- Polling errado (endpoint e status codes incorretos)
+- O prompt não instrui o Manus a **navegar cada portal individualmente** e coletar os links reais
 
-## Como funciona a API do Manus
-- **Assíncrona**: cria-se uma task, depois faz polling até completar
-- **Endpoint**: `https://api.manus.ai/v2/task.create` (POST) e `task.listMessages` (GET)
-- **Auth**: header `x-manus-api-key: $MANUS_API_KEY`
-- **O agente navega a web sozinho** — não precisa de Firecrawl
+## Solução
 
-## Plano
+### Reescrever `supabase/functions/analyze-market-manus/index.ts`
 
-### 1. Configurar API Key do Manus
-- Solicitar ao usuário a `MANUS_API_KEY` via ferramenta de secrets
-- Obtida em: Manus webapp > API Integration settings
+**1. Endpoints corretos da API v2:**
+- `POST https://api.manus.ai/v2/task.create` com header `x-manus-api-key`
+- Body: `{ message: { content: [{ type: "text", text: "..." }] } }`
+- Resposta: `{ ok: true, task_id: "..." }`
 
-### 2. Criar edge function `analyze-market-manus`
-Nova function que:
-1. Recebe dados do imóvel, portais desejados e filtros
-2. Monta um prompt descritivo para o Manus: "Pesquise imóveis comparáveis a este apartamento de 3 quartos, 120m², no bairro X, cidade Y. Busque nos portais ZAP Imóveis, Viva Real, OLX. Retorne título, preço, área, quartos, endereço e link de cada imóvel encontrado..."
-3. Cria task via `POST /v2/task.create`
-4. Faz polling via `GET /v2/task.listMessages` até `agent_status=completed` (com timeout de 120s)
-5. Extrai dados estruturados da resposta do Manus (usando Lovable AI para parse se necessário)
-6. Retorna no mesmo formato que a function atual (`{ success, comparables }`)
+**2. Polling correto:**
+- `GET https://api.manus.ai/v2/task.listMessages?task_id=X&order=desc&limit=50`
+- Procurar eventos `status_update` com `agent_status`:
+  - `running` → continuar polling
+  - `stopped` → ler `assistant_message` events para resultados
+  - `error` → falhou
 
-### 3. Atualizar `AgentNewPresentation.tsx`
-- Trocar chamada de `analyze-market` para `analyze-market-manus`
-- Adicionar mensagens de loading mais descritivas ("Manus está pesquisando portais...")
-- Manter fallback para comparáveis simulados se o Manus falhar
+**3. Prompt melhorado — instrui o Manus a navegar cada portal:**
+O prompt será reescrito para instruir o Manus a:
+- Abrir cada portal (ZAP, Viva Real, OLX, etc.) no navegador
+- Aplicar os filtros do usuário (tipo, bairro, área, preço, quartos)
+- Coletar cada anúncio individual com **o link direto do anúncio**
+- Retornar JSON estruturado com `source_url` sendo a URL real do anúncio no portal
 
-### 4. Manter function antiga como fallback
-- `analyze-market` continua existindo (Firecrawl)
-- Se `MANUS_API_KEY` não estiver configurada, usa Firecrawl automaticamente
+**4. Timeout aumentado para 5 minutos** (Manus navega portais reais, leva tempo)
 
-## Arquivos
-1. **Criar**: `supabase/functions/analyze-market-manus/index.ts`
-2. **Modificar**: `src/pages/agent/AgentNewPresentation.tsx` — chamar nova function
+### Arquivos modificados
+1. `supabase/functions/analyze-market-manus/index.ts` — reescrita completa com API v2
 
-## Riscos
-- Manus é assíncrono e pode levar 30-120s para completar a pesquisa
-- Formato de resposta do Manus é texto livre — precisa de parsing com IA
-- API do Manus tem rate limits próprios
-- Fallback para Firecrawl garante que nunca falha completamente
+### Sem mudanças no frontend
+O `AgentNewPresentation.tsx` já chama `analyze-market-manus` e espera `{ success, comparables }` — o contrato se mantém.
+
+## Exemplo do novo prompt enviado ao Manus
+
+```text
+Você é um pesquisador imobiliário. Sua tarefa é navegar nos portais 
+imobiliários listados abaixo e encontrar imóveis comparáveis ao imóvel 
+de referência.
+
+INSTRUÇÕES IMPORTANTES:
+1. Acesse CADA portal listado abaixo usando o navegador
+2. Em cada portal, busque imóveis com características similares
+3. Para CADA imóvel encontrado, copie o link direto do anúncio
+4. Colete: título, preço, área, quartos, suítes, vagas, endereço, 
+   bairro, e o LINK DO ANÚNCIO
+
+Imóvel de referência: Apartamento, 3 quartos, 120m², Bairro X, Cidade Y
+Portais: ZAP Imóveis (zapimoveis.com.br), Viva Real (vivareal.com.br)
+Filtros: área 100-140m², preço R$700k-R$1M
+
+Retorne JSON com source_url sendo a URL real do anúncio no portal.
+```
 
