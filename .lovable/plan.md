@@ -1,34 +1,32 @@
 
 
-# Corrigir Cores RE/MAX nos Slides — Atualizar Banco de Dados
+# Implementar Página "Meu Perfil" do Corretor
 
 ## Problema
-
-Os 3 layouts já têm as cores RE/MAX (`#003DA5` azul, `#DC1431` vermelho) como fallback, mas a tabela `agency_profiles` tem cores antigas salvas (`#1e3a5f`, `#c9a84c`) que sobrescrevem os defaults.
+A página `/profile` é apenas um placeholder — não tem formulário nem funcionalidade.
 
 ## Solução
+Construir uma página completa que permite ao corretor editar seus dados pessoais e profissionais, usando as tabelas `profiles` e `broker_profiles` que já existem.
 
-Uma migração SQL para atualizar as cores na tabela `agency_profiles`:
+## Dados disponíveis
 
-```sql
-UPDATE agency_profiles 
-SET primary_color = '#003DA5', secondary_color = '#DC1431' 
-WHERE primary_color = '#1e3a5f' AND secondary_color = '#c9a84c';
-```
+**profiles**: `full_name`, `email`, `phone`, `avatar_url`
+**broker_profiles**: `creci`, `short_bio`, `years_in_market`, `education`, `specialties`, `service_regions`, `vgv_summary`, `preferred_tone`, `preferred_layout`
 
-Também atualizar registros com cores NULL para garantir consistência:
+## Arquivo a editar
 
-```sql
-UPDATE agency_profiles 
-SET primary_color = '#003DA5', secondary_color = '#DC1431' 
-WHERE primary_color IS NULL OR secondary_color IS NULL;
-```
+### `src/pages/agent/AgentProfile.tsx` — Rewrite completo
 
-## Arquivos alterados
+- Buscar dados do usuário logado via `useAuth()` + queries em `profiles` e `broker_profiles`
+- Formulário organizado em seções com cards:
+  - **Dados Pessoais**: avatar (usando `ImageUploader`), nome, email (readonly), telefone
+  - **Dados Profissionais**: CRECI, bio curta, anos de mercado, formação, especialidades, regiões de atuação
+  - **Preferências de Apresentação**: resumo VGV, tom preferido, layout preferido
+- Mutation para salvar: update `profiles` + upsert `broker_profiles`
+- Toast de sucesso/erro
+- Visual coerente com branding RE/MAX (usa componentes shadcn existentes)
 
-Nenhum arquivo de código precisa mudar — apenas dados no banco.
-
-## Resultado
-
-Todos os slides passarão a renderizar com Azul RE/MAX e Vermelho RE/MAX imediatamente, sem necessidade de alterar layouts.
+## Sem alterações em
+- Banco de dados (tabelas já existem)
+- Lógica de negócio, rotas, outros componentes
 
