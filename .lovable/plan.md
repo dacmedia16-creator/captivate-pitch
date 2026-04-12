@@ -1,55 +1,52 @@
 
 
-# Aplicar Paleta RE/MAX ao Site Inteiro
+# Detecção de Nova Versão — Build Hash Polling
 
-## Situação Atual
-O site usa uma paleta azul escuro genérico (`hsl(213 55% 20%)`) com acentos dourados (`hsl(42 55% 54%)`). Os slides já foram atualizados para RE/MAX, mas a UI do site (login, sidebar, topbar, cards, botões) ainda usa o tema antigo.
+## Abordagem escolhida
 
-## Mudanças
+O projeto **não usa PWA nem service worker**, então a melhor estratégia é **polling do `index.html`** para detectar mudanças no hash dos assets do Vite.
 
-### 1. CSS Variables (`src/index.css`)
-Substituir a paleta inteira por cores RE/MAX:
+**Como funciona:** A cada build, o Vite gera nomes de arquivo com hash único (ex: `main-abc123.js`). O sistema busca periodicamente o `index.html` do servidor e compara o `<script>` com o carregado. Se diferir, há nova versão.
 
-| Variable | Antes (HSL) | Depois (baseado em RE/MAX) |
-|----------|-------------|---------------------------|
-| `--primary` | `213 55% 20%` (azul genérico) | `216 100% 32%` (#003DA5) |
-| `--accent` | `42 55% 54%` (dourado) | `352 83% 47%` (#DC1431) |
-| `--gold` | `42 55% 54%` | `352 83% 47%` (vermelho RE/MAX substitui o dourado) |
-| `--ring` | azul genérico | azul RE/MAX |
-| `--sidebar-background` | azul escuro genérico | azul RE/MAX escuro |
-| `--sidebar-primary` | dourado | vermelho RE/MAX |
-| `--sidebar-ring` | dourado | vermelho RE/MAX |
-| Dark mode | mesma lógica | mesma conversão |
+**Quando verifica:**
+- Ao retornar foco à aba (event `visibilitychange`)
+- A cada 5 minutos em segundo plano
+- **Não** no carregamento inicial (evita falso positivo)
 
-### 2. Utilitários CSS (`src/index.css`)
-- `.gold-gradient` → gradiente vermelho RE/MAX (será renomeado conceitualmente mas mantido como classe para não quebrar referências)
-- `.text-gradient-gold` → gradiente vermelho RE/MAX
-- `.animate-shimmer-gold` → shimmer vermelho
+**Anti-loop:** Uma flag `sessionStorage` impede recarregamento repetido.
 
-### 3. Componentes afetados (sem mudança de código)
-Como usam variáveis CSS, mudam automaticamente:
-- `Button` (usa `--primary`)
-- `Card` (usa `--card`)
-- `TopBar` (usa `--background`, `gold-gradient`)
-- `AppSidebar` (usa `--sidebar-*`, `gold-gradient`)
-- `MetricCard` (usa `gold-gradient`)
-- `Login` (usa gradientes inline com HSL antigos — precisa atualizar)
+## Arquivos
 
-### 4. Arquivos com cores inline hardcoded
-- **`src/pages/auth/Login.tsx`**: gradiente de fundo e círculos decorativos usam HSL antigos — atualizar para azul RE/MAX e vermelho
-- **`src/components/TopBar.tsx`**: shadow usa `hsl(215 30% 12%)` — atualizar
-- **`src/components/shared/MetricCard.tsx`**: usa `gold-gradient` — funciona automaticamente
+| Ação | Arquivo |
+|------|---------|
+| Criar | `src/hooks/useVersionCheck.ts` — hook com polling + detecção |
+| Criar | `src/components/VersionUpdateBanner.tsx` — banner fixo bottom com botão "Atualizar sistema" |
+| Editar | `src/App.tsx` — renderizar `<VersionUpdateBanner />` dentro do layout |
 
-### 5. Tailwind config (`tailwind.config.ts`)
-Sem mudanças necessárias — já referencia variáveis CSS.
+## Componente visual
 
-## Arquivos a editar
-1. `src/index.css` — paleta completa (light + dark) + utilitários
-2. `src/pages/auth/Login.tsx` — cores inline do gradiente de fundo
-3. `src/components/TopBar.tsx` — shadow inline
+Banner fixo no bottom da tela, com:
+- Fundo azul RE/MAX (`#003DA5`) com leve blur
+- Ícone de atualização + texto "Nova versão disponível"
+- Descrição: "Uma atualização do sistema foi publicada. Clique para carregar a versão mais recente."
+- Botão vermelho RE/MAX (`#DC1431`): "Atualizar sistema"
+- Botão "X" para dispensar temporariamente
+- Responsivo, elegante, coerente com o branding atual
 
-## O que NÃO muda
-- Lógica de negócio, rotas, banco de dados
-- Estrutura de componentes
-- Layouts de slides (já atualizados)
+## Hook `useVersionCheck`
+
+```text
+1. Ao montar, captura o src do <script type="module"> atual
+2. Registra listener de visibilitychange
+3. Registra setInterval de 5min
+4. Em cada check: fetch("/index.html") com cache-bust
+5. Extrai o src do script do HTML retornado
+6. Se diferente → setState(updateAvailable = true)
+7. Ao clicar "Atualizar": sessionStorage.set flag + window.location.reload()
+8. No mount: se flag existe, limpa e não mostra banner
+```
+
+## Sem alterações em
+- Lógica de negócio, banco de dados, Edge Functions
+- Vite config (não precisa de plugin extra)
 
