@@ -651,6 +651,7 @@ export type Database = {
           median_price: number | null
           price_range_max: number | null
           price_range_min: number | null
+          research_metadata: Json | null
           suggested_ad_price: number | null
           suggested_fast_sale_price: number | null
           suggested_market_price: number | null
@@ -669,6 +670,7 @@ export type Database = {
           median_price?: number | null
           price_range_max?: number | null
           price_range_min?: number | null
+          research_metadata?: Json | null
           suggested_ad_price?: number | null
           suggested_fast_sale_price?: number | null
           suggested_market_price?: number | null
@@ -687,6 +689,7 @@ export type Database = {
           median_price?: number | null
           price_range_max?: number | null
           price_range_min?: number | null
+          research_metadata?: Json | null
           suggested_ad_price?: number | null
           suggested_fast_sale_price?: number | null
           suggested_market_price?: number | null
