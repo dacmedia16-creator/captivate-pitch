@@ -15,6 +15,7 @@ export interface MarketStudyData {
   maxArea: string;
   minPrice: string;
   maxPrice: string;
+  minComparables: string;
   maxComparables: string;
 }
 
@@ -58,7 +59,19 @@ export function StepMarketStudy({ data, onChange }: StepMarketStudyProps) {
           ) : portalSettings && portalSettings.length > 0 ? (
             portalSettings.map((ps: any) => (
               <div key={ps.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                <span className="font-medium">{ps.portal_sources?.name || "Portal"}</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-medium">{ps.portal_sources?.name || "Portal"}</span>
+                  {ps.portal_sources?.base_url && (
+                    <a
+                      href={ps.portal_sources.base_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline truncate max-w-[250px]"
+                    >
+                      {ps.portal_sources.base_url}
+                    </a>
+                  )}
+                </div>
                 <Switch
                   checked={data.selectedPortals.includes(ps.portal_source_id)}
                   onCheckedChange={() => togglePortal(ps.portal_source_id)}
@@ -86,15 +99,12 @@ export function StepMarketStudy({ data, onChange }: StepMarketStudyProps) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Nº de comparáveis</Label>
-            <Select value={data.maxComparables} onValueChange={v => onChange({ ...data, maxComparables: v })}>
-              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-              <SelectContent>
-                {["5", "10", "15", "20", "30"].map(n => (
-                  <SelectItem key={n} value={n}>{n}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Mín. de imóveis</Label>
+            <Input type="number" min="1" value={data.minComparables} onChange={e => onChange({ ...data, minComparables: e.target.value })} placeholder="5" />
+          </div>
+          <div className="space-y-2">
+            <Label>Máx. de imóveis</Label>
+            <Input type="number" min="1" value={data.maxComparables} onChange={e => onChange({ ...data, maxComparables: e.target.value })} placeholder="20" />
           </div>
           <div className="space-y-2">
             <Label>Metragem mínima (m²)</Label>
