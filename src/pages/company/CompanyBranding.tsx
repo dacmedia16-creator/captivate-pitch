@@ -35,10 +35,12 @@ export default function CompanyBranding() {
     primary_color: "#1e3a5f", secondary_color: "#c9a84c",
     about_global: "", about_national: "", about_regional: "", regional_numbers: "",
     about_global_image_url: "" as string | null, about_national_image_url: "" as string | null, about_regional_image_url: "" as string | null,
+    objectives: null as any, value_propositions: null as any, global_stats: null as any,
   });
 
   useEffect(() => {
     if (agency) {
+      const a = agency as any;
       setAgencyForm({
         company_name: agency.company_name || "",
         logo_url: agency.logo_url,
@@ -49,9 +51,12 @@ export default function CompanyBranding() {
         about_national: agency.about_national || "",
         about_regional: agency.about_regional || "",
         regional_numbers: agency.regional_numbers || "",
-        about_global_image_url: (agency as any).about_global_image_url || null,
-        about_national_image_url: (agency as any).about_national_image_url || null,
-        about_regional_image_url: (agency as any).about_regional_image_url || null,
+        about_global_image_url: a.about_global_image_url || null,
+        about_national_image_url: a.about_national_image_url || null,
+        about_regional_image_url: a.about_regional_image_url || null,
+        objectives: a.objectives || null,
+        value_propositions: a.value_propositions || null,
+        global_stats: a.global_stats || null,
       });
     }
   }, [agency]);
@@ -112,6 +117,8 @@ export default function CompanyBranding() {
           <TabsTrigger value="global">Mundial</TabsTrigger>
           <TabsTrigger value="nacional">Nacional</TabsTrigger>
           <TabsTrigger value="regional">Regional</TabsTrigger>
+          <TabsTrigger value="objetivos">Objetivos</TabsTrigger>
+          <TabsTrigger value="proposta">Proposta de Valor</TabsTrigger>
           <TabsTrigger value="diferenciais">Diferenciais</TabsTrigger>
           <TabsTrigger value="resultados">Resultados</TabsTrigger>
           <TabsTrigger value="depoimentos">Depoimentos</TabsTrigger>
@@ -187,6 +194,81 @@ export default function CompanyBranding() {
               <Textarea value={agencyForm.about_regional} onChange={(e) => set("about_regional", e.target.value)} rows={6} placeholder="Conteúdo regional..." />
               <div className="space-y-2"><Label>Números regionais</Label><Textarea value={agencyForm.regional_numbers} onChange={(e) => set("regional_numbers", e.target.value)} rows={4} placeholder="Dados e métricas regionais..." /></div>
               <div className="space-y-2"><Label>Imagem do slide</Label><ImageUploader value={agencyForm.about_regional_image_url} onChange={(v) => set("about_regional_image_url", v)} folder="agency" /></div>
+              <Button onClick={() => saveAgency.mutate()} disabled={saveAgency.isPending}><Save className="h-4 w-4 mr-1" />Salvar</Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="objetivos">
+          <Card>
+            <CardHeader><CardTitle className="font-sans text-lg">Objetivos de Alinhamento</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">Defina os 3 objetivos que serão exibidos no slide de alinhamento. Deixe em branco para usar os padrões.</p>
+              {(agencyForm.objectives || [
+                { icon: "key", title: "Vender seu imóvel", description: "" },
+                { icon: "chart", title: "Pelo melhor preço, no menor tempo", description: "" },
+                { icon: "checklist", title: "E com comodidade pra você", description: "" },
+              ]).map((obj: any, i: number) => (
+                <div key={i} className="p-4 rounded-lg border space-y-3">
+                  <p className="text-xs font-bold text-muted-foreground uppercase">Objetivo {i + 1}</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1"><Label>Ícone (key/chart/checklist)</Label><Input value={obj.icon || ""} onChange={(e) => {
+                      const objs = [...(agencyForm.objectives || [{ icon: "key", title: "", description: "" }, { icon: "chart", title: "", description: "" }, { icon: "checklist", title: "", description: "" }])];
+                      objs[i] = { ...objs[i], icon: e.target.value };
+                      set("objectives", objs);
+                    }} /></div>
+                    <div className="space-y-1"><Label>Título</Label><Input value={obj.title || ""} onChange={(e) => {
+                      const objs = [...(agencyForm.objectives || [{ icon: "key", title: "", description: "" }, { icon: "chart", title: "", description: "" }, { icon: "checklist", title: "", description: "" }])];
+                      objs[i] = { ...objs[i], title: e.target.value };
+                      set("objectives", objs);
+                    }} /></div>
+                  </div>
+                  <div className="space-y-1"><Label>Descrição</Label><Textarea value={obj.description || ""} onChange={(e) => {
+                    const objs = [...(agencyForm.objectives || [{ icon: "key", title: "", description: "" }, { icon: "chart", title: "", description: "" }, { icon: "checklist", title: "", description: "" }])];
+                    objs[i] = { ...objs[i], description: e.target.value };
+                    set("objectives", objs);
+                  }} rows={2} /></div>
+                </div>
+              ))}
+              <Button onClick={() => saveAgency.mutate()} disabled={saveAgency.isPending}><Save className="h-4 w-4 mr-1" />Salvar</Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="proposta">
+          <Card>
+            <CardHeader><CardTitle className="font-sans text-lg">Proposta de Valor & Estatísticas Globais</CardTitle></CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">Propostas de valor exibidas no slide institucional.</p>
+                {(agencyForm.value_propositions || [
+                  { title: "Profissionalismo", description: "" },
+                  { title: "Segurança", description: "" },
+                  { title: "Parcerias", description: "" },
+                ]).map((vp: any, i: number) => (
+                  <div key={i} className="p-4 rounded-lg border space-y-3">
+                    <p className="text-xs font-bold text-muted-foreground uppercase">Proposta {i + 1}</p>
+                    <div className="space-y-1"><Label>Título</Label><Input value={vp.title || ""} onChange={(e) => {
+                      const vps = [...(agencyForm.value_propositions || [{ title: "", description: "" }, { title: "", description: "" }, { title: "", description: "" }])];
+                      vps[i] = { ...vps[i], title: e.target.value };
+                      set("value_propositions", vps);
+                    }} /></div>
+                    <div className="space-y-1"><Label>Descrição</Label><Textarea value={vp.description || ""} onChange={(e) => {
+                      const vps = [...(agencyForm.value_propositions || [{ title: "", description: "" }, { title: "", description: "" }, { title: "", description: "" }])];
+                      vps[i] = { ...vps[i], description: e.target.value };
+                      set("value_propositions", vps);
+                    }} rows={2} /></div>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t pt-4 space-y-4">
+                <p className="text-sm font-semibold">Estatísticas Globais</p>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-1"><Label>Países</Label><Input type="number" value={agencyForm.global_stats?.countries || ""} onChange={(e) => set("global_stats", { ...(agencyForm.global_stats || {}), countries: Number(e.target.value) || 0 })} /></div>
+                  <div className="space-y-1"><Label>Unidades</Label><Input type="number" value={agencyForm.global_stats?.units || ""} onChange={(e) => set("global_stats", { ...(agencyForm.global_stats || {}), units: Number(e.target.value) || 0 })} /></div>
+                  <div className="space-y-1"><Label>Corretores</Label><Input type="number" value={agencyForm.global_stats?.brokers || ""} onChange={(e) => set("global_stats", { ...(agencyForm.global_stats || {}), brokers: Number(e.target.value) || 0 })} /></div>
+                </div>
+              </div>
               <Button onClick={() => saveAgency.mutate()} disabled={saveAgency.isPending}><Save className="h-4 w-4 mr-1" />Salvar</Button>
             </CardContent>
           </Card>

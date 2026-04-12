@@ -6,23 +6,47 @@ interface GenerateParams {
   brokerId: string;
 }
 
+const DEFAULT_OBJECTIVES = [
+  { icon: "key", title: "Vender seu imóvel", description: "Com estratégia e dedicação total ao seu objetivo." },
+  { icon: "chart", title: "Pelo melhor preço, no menor tempo", description: "Utilizando análise de mercado e precificação inteligente." },
+  { icon: "checklist", title: "E com comodidade pra você", description: "Cuidamos de toda a burocracia e documentação." },
+];
+
+const DEFAULT_VALUE_PROPOSITIONS = [
+  { title: "Profissionalismo", description: "Equipe altamente qualificada e treinada para oferecer o melhor atendimento." },
+  { title: "Segurança", description: "Processos seguros e transparentes em todas as etapas da negociação." },
+  { title: "Parcerias", description: "Rede de parceiros estratégicos para maximizar a visibilidade do seu imóvel." },
+];
+
+const DEFAULT_GLOBAL_STATS = { countries: 0, units: 0, brokers: 0 };
+
+const DEFAULT_REQUIRED_DOCUMENTS = [
+  { title: "Certidão atualizada de ônus reais", required: true },
+  { title: "Espelho do IPTU", required: true },
+  { title: "Cópia do RG e CPF dos proprietários", required: true },
+  { title: "Cópia da conta de luz ou água", required: true },
+  { title: "Documentação para análise prévia e divulgação", required: true },
+];
+
 const SECTION_DEFINITIONS = [
   { key: "cover", title: "Capa", order: 0 },
-  { key: "broker_intro", title: "Apresentação do Corretor", order: 1 },
-  { key: "about_global", title: "Apresentação Mundial", order: 2 },
-  { key: "about_national", title: "Apresentação Nacional", order: 3 },
-  { key: "about_regional", title: "Apresentação Regional", order: 4 },
-  { key: "property_summary", title: "Resumo do Imóvel", order: 5 },
-  { key: "marketing_plan", title: "Plano de Marketing", order: 6 },
-  { key: "differentials", title: "Diferenciais", order: 7 },
-  { key: "results", title: "Resultados", order: 8 },
-  { key: "market_study_placeholder", title: "Estudo de Mercado", order: 9 },
-  { key: "pricing_scenarios", title: "Cenários de Preço", order: 10 },
-  { key: "closing", title: "Fechamento", order: 11 },
+  { key: "objectives_alignment", title: "Alinhamento de Objetivos", order: 1 },
+  { key: "agency_value_proposition", title: "Proposta de Valor", order: 2 },
+  { key: "broker_intro", title: "Apresentação do Corretor", order: 3 },
+  { key: "about_global", title: "Apresentação Mundial", order: 4 },
+  { key: "about_national", title: "Apresentação Nacional", order: 5 },
+  { key: "about_regional", title: "Apresentação Regional", order: 6 },
+  { key: "property_summary", title: "Resumo do Imóvel", order: 7 },
+  { key: "marketing_plan", title: "Plano de Marketing", order: 8 },
+  { key: "differentials", title: "Diferenciais", order: 9 },
+  { key: "results", title: "Resultados", order: 10 },
+  { key: "market_study_placeholder", title: "Estudo de Mercado", order: 11 },
+  { key: "pricing_scenarios", title: "Cenários de Preço", order: 12 },
+  { key: "required_documentation", title: "Documentação Necessária", order: 13 },
+  { key: "closing", title: "Fechamento", order: 14 },
 ];
 
 export async function generatePresentationSections({ presentationId, tenantId, brokerId }: GenerateParams) {
-  // Fetch all data in parallel
   const [
     { data: presentation },
     { data: brokerProfile },
@@ -45,6 +69,8 @@ export async function generatePresentationSections({ presentationId, tenantId, b
     supabase.from("presentation_images").select("*").eq("presentation_id", presentationId).order("sort_order"),
   ]);
 
+  const agencyAny = agency as any;
+
   const sections = SECTION_DEFINITIONS.map(def => {
     let content: Record<string, any> = {};
 
@@ -62,6 +88,21 @@ export async function generatePresentationSections({ presentationId, tenantId, b
           cover_image: images?.[0]?.image_url || null,
         };
         break;
+      case "objectives_alignment":
+        content = {
+          objectives: agencyAny?.objectives || DEFAULT_OBJECTIVES,
+          logo_url: agency?.logo_url,
+          agency_name: agency?.company_name,
+        };
+        break;
+      case "agency_value_proposition":
+        content = {
+          value_propositions: agencyAny?.value_propositions || DEFAULT_VALUE_PROPOSITIONS,
+          global_stats: agencyAny?.global_stats || DEFAULT_GLOBAL_STATS,
+          logo_url: agency?.logo_url,
+          agency_name: agency?.company_name,
+        };
+        break;
       case "broker_intro":
         content = {
           name: profile?.full_name,
@@ -76,13 +117,13 @@ export async function generatePresentationSections({ presentationId, tenantId, b
         };
         break;
       case "about_global":
-        content = { text: agency?.about_global, logo_url: agency?.logo_url, image_url: (agency as any)?.about_global_image_url };
+        content = { text: agency?.about_global, logo_url: agency?.logo_url, image_url: agencyAny?.about_global_image_url };
         break;
       case "about_national":
-        content = { text: agency?.about_national, logo_url: agency?.logo_url, image_url: (agency as any)?.about_national_image_url };
+        content = { text: agency?.about_national, logo_url: agency?.logo_url, image_url: agencyAny?.about_national_image_url };
         break;
       case "about_regional":
-        content = { text: agency?.about_regional, regional_numbers: agency?.regional_numbers, branch_photo_url: agency?.branch_photo_url, image_url: (agency as any)?.about_regional_image_url };
+        content = { text: agency?.about_regional, regional_numbers: agency?.regional_numbers, branch_photo_url: agency?.branch_photo_url, image_url: agencyAny?.about_regional_image_url };
         break;
       case "property_summary":
         content = {
@@ -128,6 +169,13 @@ export async function generatePresentationSections({ presentationId, tenantId, b
           ],
         };
         break;
+      case "required_documentation":
+        content = {
+          documents: (presentation as any)?.required_documents || DEFAULT_REQUIRED_DOCUMENTS,
+          broker_name: profile?.full_name,
+          agency_name: agency?.company_name,
+        };
+        break;
       case "closing":
         content = {
           broker_name: profile?.full_name,
@@ -152,7 +200,6 @@ export async function generatePresentationSections({ presentationId, tenantId, b
   const { error } = await supabase.from("presentation_sections").insert(sections);
   if (error) throw error;
 
-  // Update presentation status
   await supabase.from("presentations").update({ status: "generated" }).eq("id", presentationId);
 
   return sections;
