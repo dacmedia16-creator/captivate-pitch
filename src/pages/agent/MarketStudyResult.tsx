@@ -454,7 +454,103 @@ export default function MarketStudyResult() {
             </Card>
           )}
 
-          {/* Charts */}
+          {/* Research Transparency */}
+          {result.research_metadata && (() => {
+            const meta = result.research_metadata as any;
+            return (
+              <Card className="glass-card">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Search className="h-5 w-5" />
+                    Transparência da Pesquisa
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Summary stats */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+                      <Search className="h-4 w-4 text-primary" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Encontrados</p>
+                        <p className="font-semibold">{meta.total_listings_found || 0}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Abertos</p>
+                        <p className="font-semibold">{meta.listings_opened || 0}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+                      <XCircle className="h-4 w-4 text-red-500" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Descartados</p>
+                        <p className="font-semibold">{meta.listings_discarded || 0}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Coletado em</p>
+                        <p className="font-semibold text-xs">
+                          {meta.collected_at ? new Date(meta.collected_at).toLocaleString("pt-BR") : "—"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Portals checked */}
+                  {meta.portals_checked && meta.portals_checked.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium mb-2">Portais pesquisados</p>
+                      <div className="flex flex-wrap gap-2">
+                        {meta.portals_checked.map((p: any, i: number) => (
+                          <Badge key={i} variant="outline" className="text-xs">
+                            {p.portal_name}: {p.urls_found} encontrados, {p.urls_valid || 0} válidos
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Discard reasons */}
+                  {meta.discard_reasons && meta.discard_reasons.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium mb-2">Motivos de descarte</p>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {meta.discard_reasons.map((d: any, i: number) => (
+                          <div key={i} className="flex items-start gap-2 text-xs">
+                            <XCircle className="h-3 w-3 text-red-400 mt-0.5 shrink-0" />
+                            <span className="text-muted-foreground">
+                              <span className="font-medium">{d.portal}:</span> {d.reason}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Limitations */}
+                  {meta.limitations && meta.limitations.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium mb-2 flex items-center gap-1">
+                        <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
+                        Limitações
+                      </p>
+                      <ul className="space-y-1">
+                        {meta.limitations.map((l: string, i: number) => (
+                          <li key={i} className="text-xs text-muted-foreground">• {l}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+
           {approvedComparables.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="glass-card">
