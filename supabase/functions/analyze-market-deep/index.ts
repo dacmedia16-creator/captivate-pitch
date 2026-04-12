@@ -47,6 +47,7 @@ interface Filters {
   maxComparables?: string;
   minComparables?: string;
   preferSameCondominium?: boolean;
+  maxListingAgeMonths?: string;
 }
 
 interface DiscardReason {
@@ -408,6 +409,8 @@ IMÓVEL DE REFERÊNCIA:
 - Padrão: ${property.property_standard || "Não informado"}
 - Preço esperado: ${property.owner_expected_price ? `R$ ${Number(property.owner_expected_price).toLocaleString("pt-BR")}` : "Não informado"}
 
+IMPORTANTE: Extraia também a data do anúncio (listing_date) quando disponível. Procure por textos como "Anúncio criado em", "Publicado em", "Atualizado em", "Atualizado há X dias/meses", datas no formato DD/MM/YYYY ou similar. Se encontrar "Atualizado há 3 meses", calcule a data aproximada. Retorne no formato YYYY-MM-DD.
+
 Extraia todos os imóveis relevantes. Descarte apenas se claramente incompatível (tipo diferente, cidade diferente).`;
 
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -453,6 +456,7 @@ Extraia todos os imóveis relevantes. Descarte apenas se claramente incompatíve
                         advertiser: { type: "string", description: "Imobiliária ou anunciante" },
                         differentials: { type: "array", items: { type: "string" }, description: "Diferenciais do imóvel" },
                         description_summary: { type: "string", description: "Resumo curto da descrição" },
+                        listing_date: { type: "string", description: "Data do anúncio no formato YYYY-MM-DD, se disponível" },
                       },
                       required: ["title", "price", "area", "source_url", "source_name"],
                       additionalProperties: false,
