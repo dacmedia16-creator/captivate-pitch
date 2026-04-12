@@ -1,157 +1,120 @@
 
 
-# Banco de Dados, Auth e Papéis — Listing Studio AI
+# Dashboards, Cadastros e Configurações — Listing Studio AI
 
 ## Resumo
 
-Implementar autenticação com Supabase, sistema de papéis (super_admin, agency_admin, broker), estrutura multi-tenant com RLS, e todas as 20+ tabelas descritas no prompt.
+Implementar todos os dashboards funcionais (Super Admin e Admin da Imobiliária), CRUD de imobiliárias, CRUD de corretores, configuração institucional com 8 abas, plano de marketing, e configuração de portais. Criar componentes reutilizáveis (MetricCard, DataTable, ImageUploader, etc.).
 
-## Pré-requisito
+## Pré-requisito: Storage Bucket
 
-**Ativar Lovable Cloud** — o projeto ainda não tem Supabase conectado. Será necessário habilitar o Lovable Cloud (ou conectar um projeto Supabase externo) para criar o banco de dados, autenticação e edge functions.
+Criar um bucket `uploads` (público) para logos, fotos de agência, avatares e imagens de resultados/depoimentos.
 
-## Etapas
+## Componentes Reutilizáveis a Criar
 
-### 1. Habilitar backend (Lovable Cloud)
-- Configurar Supabase via Lovable Cloud para ter banco de dados, auth e storage disponíveis.
-- Instalar `@supabase/supabase-js` no projeto.
+| Componente | Caminho | Uso |
+|---|---|---|
+| MetricCard | `src/components/shared/MetricCard.tsx` | Cards de métricas nos dashboards |
+| DataTable | `src/components/shared/DataTable.tsx` | Tabelas com busca e paginação |
+| FormModal | `src/components/shared/FormModal.tsx` | Dialog genérico para CRUD |
+| ImageUploader | `src/components/shared/ImageUploader.tsx` | Upload de imagens para Supabase Storage |
+| StatusBadge | `src/components/shared/StatusBadge.tsx` | Badge de status (ativo/bloqueado/pendente) |
+| ConfirmDialog | `src/components/shared/ConfirmDialog.tsx` | Confirmação de ações destrutivas |
+| SortableList | `src/components/shared/SortableList.tsx` | Lista reordenável para itens com sort_order |
 
-### 2. Criar tabelas via migrações
+## Páginas a Implementar
 
-Uma migração SQL criará todas as tabelas na ordem correta de dependências:
+### 1. Super Admin Dashboard (`AdminDashboard.tsx`)
+- 6 MetricCards: imobiliárias, usuários, corretores, apresentações, estudos de mercado, PDFs exportados
+- Queries agregadas via Supabase (count de cada tabela)
+- Tabela de imobiliárias com logo, nome, status, total corretores, total apresentações, data criação, ações
 
-```text
-Ordem de criação:
-1. app_role enum (super_admin, agency_admin, broker)
-2. tenants
-3. subscription_plans
-4. profiles (refs auth.users)
-5. user_roles (refs auth.users, usa app_role enum)
-6. broker_profiles (refs profiles)
-7. agency_profiles (refs tenants)
-8. marketing_actions (refs tenants)
-9. competitive_differentials (refs tenants)
-10. sales_results (refs tenants)
-11. testimonials (refs tenants)
-12. portal_sources
-13. tenant_portal_settings (refs tenants, portal_sources)
-14. presentations (refs tenants, profiles)
-15. presentation_images (refs presentations)
-16. presentation_sections (refs presentations)
-17. presentation_templates (refs tenants, profiles)
-18. market_analysis_jobs (refs tenants, presentations)
-19. market_comparables (refs market_analysis_jobs)
-20. market_reports (refs market_analysis_jobs)
-21. export_history (refs presentations, profiles)
-22. audit_logs
-```
+### 2. Gestão de Imobiliárias (`AdminTenants.tsx`)
+- DataTable com todas as imobiliárias
+- FormModal para criar/editar tenant (nome, slug, status, plano via subscription_plans)
+- Ações: editar, bloquear/ativar, visualizar detalhes
+- Ao criar tenant, criar também um registro em `agency_profiles`
 
-**Nota sobre papéis**: Seguindo as melhores práticas de segurança, os papéis serão armazenados em uma tabela separada `user_roles` (não na tabela profiles). Uma função `has_role()` com SECURITY DEFINER será usada nas policies RLS para evitar recursão infinita. O campo `role` em `profiles` será mantido apenas como cache/display, não para controle de acesso.
+### 3. Gestão de Usuários (`AdminUsers.tsx`)
+- Tabela de todos os usuários com perfil, tenant, papel, status
+- Filtros por tenant e papel
 
-### 3. Row Level Security (RLS)
+### 4. Company Dashboard (`CompanyDashboard.tsx`)
+- MetricCards: corretores ativos, apresentações, estudos, PDFs
+- Tabela de últimas apresentações do tenant
+- Tabela de corretores recentes
+- Top corretores por número de apresentações
 
-Todas as tabelas terão RLS habilitado. Estratégia:
+### 5. Gestão de Corretores (`CompanyTeam.tsx`)
+- DataTable com foto, nome, email, telefone, status, total apresentações, data cadastro
+- FormModal para criar/editar corretor (todos os campos de profiles + broker_profiles)
+- Criar corretor: insere em profiles + user_roles (broker) + broker_profiles
+- Ações: editar, ativar/desativar
 
-- **Função `has_role()`**: SECURITY DEFINER para checar papéis sem recursão
-- **Função `get_user_tenant_id()`**: SECURITY DEFINER para obter o tenant_id do usuário autenticado
-- **super_admin**: acesso total a todas as tabelas
-- **agency_admin**: acesso filtrado por `tenant_id` do próprio tenant
-- **broker**: acesso filtrado por `tenant_id` + `broker_id` (próprios dados) nas tabelas de apresentações; leitura dos dados institucionais do tenant
+### 6. Configuração Institucional (`CompanyBranding.tsx`)
+- Página com 8 abas usando Tabs do shadcn:
+  - **Dados da empresa**: nome, logo (ImageUploader), foto da agência
+  - **Branding**: cor principal, cor secundária, preview visual
+  - **Apresentação mundial**: textarea/rich-text para about_global
+  - **Apresentação nacional**: textarea para about_national
+  - **Apresentação regional**: textarea para about_regional + regional_numbers
+  - **Diferenciais**: CRUD inline (competitive_differentials) — título, descrição, ordem, ativo
+  - **Resultados**: CRUD inline (sales_results) — título, descrição, métrica, imagem, ordem
+  - **Depoimentos**: CRUD inline (testimonials) — nome, cargo, texto, imagem, ordem
 
-### 4. Seed com dados demo
+### 7. Plano de Marketing (`CompanySettings.tsx` ou nova rota)
+- CRUD de marketing_actions do tenant
+- Cada ação: título, descrição, ícone (select com opções Lucide), imagem, ordem, ativo/inativo
+- Lista reordenável
 
-Inserir dados iniciais:
-- 1 tenant demo ("Imobiliária Premium")
-- 1 super_admin, 1 agency_admin, 1 broker
-- Portal sources (vivareal, zap, olx, etc.)
-- Subscription plan padrão
-- Dados de exemplo: marketing actions, diferenciais, resultados, depoimentos
+### 8. Configuração de Portais (dentro de CompanySettings ou nova aba)
+- Lista de portal_sources com toggle habilitado/desabilitado
+- Campos: prioridade, peso
+- Usa tenant_portal_settings para persistir
 
-### 5. Integração no frontend
+## Sidebar — Novas rotas
 
-- Criar `src/integrations/supabase/client.ts` com o cliente Supabase
-- Criar `src/contexts/AuthContext.tsx` com login/logout, estado de sessão, e papel do usuário
-- Criar páginas `/login` e `/signup`
-- Atualizar `RoleGuard` para usar papel real do banco (via `user_roles`)
-- Atualizar `AppSidebar` e `TopBar` para usar dados do perfil autenticado
-- Proteger todas as rotas (redirecionar para login se não autenticado)
-- Remover o seletor de papel de demo da sidebar (substituído por auth real)
+Adicionar ao adminNav:
+- Marketing → `/company/marketing`
+- Portais → `/company/portals`
 
-### 6. Tipos TypeScript
+## Navegação atualizada
 
-- Gerar tipos para todas as tabelas do Supabase
-- Criar `src/integrations/supabase/types.ts` com as interfaces
+Novas rotas no App.tsx:
+- `/company/marketing` → CompanyMarketing
+- `/company/portals` → CompanyPortals
+
+## Migração SQL
+
+- Criar bucket `uploads` no storage com policies públicas de leitura e autenticadas de escrita
+- Não há alteração de schema (todas as tabelas já existem)
 
 ## Detalhes técnicos
 
-**Função has_role (evita recursão RLS):**
-```sql
-CREATE FUNCTION public.has_role(_user_id uuid, _role app_role)
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
-SET search_path = public AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.user_roles
-    WHERE user_id = _user_id AND role = _role
-  )
-$$;
-```
+- Todas as queries usam `@tanstack/react-query` com `useQuery` / `useMutation`
+- Formulários com `react-hook-form` + `zod` para validação
+- Contagens no dashboard via `.select('id', { count: 'exact', head: true })`
+- Upload de imagens via `supabase.storage.from('uploads').upload()`
+- Todas as operações respeitam RLS existente (tenant_id é setado automaticamente via AuthContext)
 
-**Função get_user_tenant_id:**
-```sql
-CREATE FUNCTION public.get_user_tenant_id(_user_id uuid)
-RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER
-SET search_path = public AS $$
-  SELECT tenant_id FROM public.profiles
-  WHERE id = _user_id LIMIT 1
-$$;
-```
+## Arquivos a criar
 
-**Exemplo de policy RLS para tabela multi-tenant:**
-```sql
--- Super admin vê tudo
-CREATE POLICY "super_admin_all" ON presentations
-  FOR ALL USING (public.has_role(auth.uid(), 'super_admin'));
-
--- Agency admin vê do próprio tenant
-CREATE POLICY "agency_admin_tenant" ON presentations
-  FOR ALL USING (
-    public.has_role(auth.uid(), 'agency_admin')
-    AND tenant_id = public.get_user_tenant_id(auth.uid())
-  );
-
--- Broker vê apenas os próprios
-CREATE POLICY "broker_own" ON presentations
-  FOR ALL USING (
-    public.has_role(auth.uid(), 'broker')
-    AND broker_id = auth.uid()
-  );
-```
-
-**Trigger para criar profile automaticamente no signup:**
-```sql
-CREATE FUNCTION public.handle_new_user()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-  INSERT INTO public.profiles (id, email, full_name, status)
-  VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name', 'active');
-  RETURN NEW;
-END;
-$$;
-```
-
-## Arquivos a criar/modificar
-
-| Arquivo | Ação |
-|---------|------|
-| Migração SQL (20+ tabelas + RLS + funções + seed) | Criar via migration tool |
-| `src/integrations/supabase/client.ts` | Criar |
-| `src/integrations/supabase/types.ts` | Criar |
-| `src/contexts/AuthContext.tsx` | Criar |
-| `src/pages/auth/Login.tsx` | Criar |
-| `src/pages/auth/Signup.tsx` | Criar |
-| `src/components/RoleGuard.tsx` | Atualizar (usar auth real) |
-| `src/components/AppSidebar.tsx` | Atualizar (remover demo switcher) |
-| `src/components/TopBar.tsx` | Atualizar (dados reais do perfil) |
-| `src/contexts/RoleContext.tsx` | Refatorar para usar AuthContext |
-| `src/App.tsx` | Adicionar rotas de auth, proteger rotas |
+| Arquivo | Descrição |
+|---|---|
+| `src/components/shared/MetricCard.tsx` | Card de métrica reutilizável |
+| `src/components/shared/DataTable.tsx` | Tabela com busca e paginação |
+| `src/components/shared/FormModal.tsx` | Modal de formulário |
+| `src/components/shared/ImageUploader.tsx` | Upload de imagem |
+| `src/components/shared/StatusBadge.tsx` | Badge de status |
+| `src/components/shared/ConfirmDialog.tsx` | Dialog de confirmação |
+| `src/pages/admin/AdminDashboard.tsx` | Dashboard super admin (reescrever) |
+| `src/pages/admin/AdminTenants.tsx` | CRUD imobiliárias (reescrever) |
+| `src/pages/admin/AdminUsers.tsx` | Listagem de usuários (reescrever) |
+| `src/pages/company/CompanyDashboard.tsx` | Dashboard imobiliária (reescrever) |
+| `src/pages/company/CompanyTeam.tsx` | CRUD corretores (reescrever) |
+| `src/pages/company/CompanyBranding.tsx` | 8 abas institucional (reescrever) |
+| `src/pages/company/CompanyMarketing.tsx` | CRUD marketing actions (novo) |
+| `src/pages/company/CompanyPortals.tsx` | Config portais (novo) |
+| `src/App.tsx` | Adicionar novas rotas |
+| `src/components/AppSidebar.tsx` | Adicionar Marketing e Portais ao menu |
 
