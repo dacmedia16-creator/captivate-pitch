@@ -1,34 +1,42 @@
 
 
-# Base do App — Status e Ajuste Final
+# Auth, Roles, Tabelas e Seed Demo — Ajuste Final
 
-## Already Implemented (no changes needed)
+## Status Atual
 
-Everything from this prompt is already built:
+Tudo ja esta implementado:
 
-- **3 Profiles**: `super_admin`, `agency_admin`, `broker` with `user_roles` table and `RoleGuard`
-- **Multi-tenant architecture**: 22 tables with RLS policies
-- **Premium visual design**: Dark sidebar, gold accents, glass cards, Playfair Display + Inter typography
-- **Layout**: `AppLayout` with `SidebarProvider`, `AppSidebar`, `TopBar`
-- **Auth**: Login (`/login`) and Signup (`/signup`) pages
-- **All routes and pages**: Super Admin (dashboard, tenants, users, settings), Agency Admin (dashboard, team, branding, templates, marketing, portals, settings), Broker (dashboard, presentations, new presentation, profile, market study, editor, presentation mode)
-- **Responsive**: Desktop and tablet ready
+- **Auth**: Supabase Auth com email/senha, `handle_new_user` trigger criando profiles
+- **Roles**: Tabela `user_roles` com enum `app_role` (super_admin, agency_admin, broker), funcao `has_role()` SECURITY DEFINER
+- **22 tabelas**: Todas criadas com RLS ativo e policies por perfil
+- **Portal sources**: 8 portais ja populados
+- **Super admin**: dacmedia16@gmail.com com role super_admin
+- **Multi-tenant**: `get_user_tenant_id()` SECURITY DEFINER, policies segregando por tenant
 
-## Missing: Password Recovery
+## Unica Pendencia: Seed Demo
 
-Add a forgot password flow:
+Falta criar dados demo com 1 imobiliaria, 1 admin e 2 corretores. Isso requer:
 
-1. **Login page**: Add "Esqueceu a senha?" link below the form
-2. **Forgot password page** (`/forgot-password`): Email input that calls `supabase.auth.resetPasswordForEmail()` with redirect to `/reset-password`
-3. **Reset password page** (`/reset-password`): Form to set new password, checks for `type=recovery` in URL hash, calls `supabase.auth.updateUser({ password })`
-4. **Routes**: Add both new routes in `App.tsx` as public routes
+### Migracao SQL (seed)
 
-### Files to create/modify
+1. Criar 3 usuarios via `supabase.auth.admin.createUser` (nao e possivel via SQL puro) — alternativa: criar via edge function ou inserir direto nas tabelas `profiles` e `user_roles` sem vincular a auth.users (dados fictícios para visualizacao)
 
-| File | Action |
-|------|--------|
-| `src/pages/auth/ForgotPassword.tsx` | Create — email form |
-| `src/pages/auth/ResetPassword.tsx` | Create — new password form |
-| `src/pages/auth/Login.tsx` | Add "Esqueceu a senha?" link |
-| `src/App.tsx` | Add `/forgot-password` and `/reset-password` routes |
+**Abordagem pratica**: Criar uma edge function `seed-demo` que:
+- Cria 1 tenant "Imobiliaria Premium Demo"
+- Cria 3 usuarios de teste via admin API (admin@demo.com, corretor1@demo.com, corretor2@demo.com, senha: 12345678)
+- Atribui roles (agency_admin + 2 brokers)
+- Cria agency_profile com branding demo
+- Cria 2 broker_profiles com dados ficticios
+
+### Arquivos
+
+| Arquivo | Acao |
+|---------|------|
+| `supabase/functions/seed-demo/index.ts` | Criar — edge function one-shot para popular dados demo |
+
+### Alternativa mais simples
+
+Inserir diretamente via SQL migration apenas o tenant + agency_profile, e pedir ao usuario que crie as contas manualmente via signup. Isso evita complexidade de criar usuarios via admin API.
+
+**Recomendacao**: Usar a edge function para seed completo, ja que o usuario quer tudo funcional automaticamente.
 
