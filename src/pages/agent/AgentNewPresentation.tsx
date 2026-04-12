@@ -104,14 +104,9 @@ export default function AgentNewPresentation() {
           ).then(() => null)
         : Promise.resolve(null);
 
-      let portalSourcesPromise: Promise<any> = Promise.resolve(null);
-      if (marketData.selectedPortals.length > 0) {
-        portalSourcesPromise = supabase
-          .from("portal_sources")
-          .select("id, name")
-          .in("id", marketData.selectedPortals)
-          .then(res => res);
-      }
+      const portalSourcesPromise = marketData.selectedPortals.length > 0
+        ? Promise.resolve(supabase.from("portal_sources").select("id, name").in("id", marketData.selectedPortals))
+        : Promise.resolve(null);
 
       const [, portalSourcesRes] = await Promise.all([photosPromise, portalSourcesPromise]);
 
