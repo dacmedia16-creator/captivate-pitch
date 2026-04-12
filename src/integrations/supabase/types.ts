@@ -639,6 +639,7 @@ export type Database = {
           property_type: string | null
           selected_layout: string | null
           selected_tone: string | null
+          share_expires_at: string | null
           share_token: string | null
           status: string
           suites: number | null
@@ -672,6 +673,7 @@ export type Database = {
           property_type?: string | null
           selected_layout?: string | null
           selected_tone?: string | null
+          share_expires_at?: string | null
           share_token?: string | null
           status?: string
           suites?: number | null
@@ -705,6 +707,7 @@ export type Database = {
           property_type?: string | null
           selected_layout?: string | null
           selected_tone?: string | null
+          share_expires_at?: string | null
           share_token?: string | null
           status?: string
           suites?: number | null
@@ -1008,6 +1011,7 @@ export type Database = {
           property_type: string | null
           selected_layout: string | null
           selected_tone: string | null
+          share_expires_at: string | null
           share_token: string | null
           status: string
           suites: number | null
