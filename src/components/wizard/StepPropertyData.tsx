@@ -1,10 +1,12 @@
+import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ImageUploader } from "@/components/shared/ImageUploader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { X, Tag, MapPin, Ruler, Star, Camera } from "lucide-react";
+import { X, Tag, MapPin, Ruler, Star, Camera, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export interface PropertyData {
   title: string; owner_name: string; property_type: string; property_purpose: string;
