@@ -170,8 +170,9 @@ export default function AgentNewPresentation() {
         brokerId: user.id,
       });
 
-      // Update pricing_scenarios section with market report data
+      // Update pricing_scenarios and market_study_placeholder sections
       if (marketReport) {
+        // Update pricing_scenarios
         await supabase.from("presentation_sections")
           .update({
             content: {
@@ -185,6 +186,28 @@ export default function AgentNewPresentation() {
           })
           .eq("presentation_id", pres.id)
           .eq("section_key", "pricing_scenarios");
+
+        // Update market_study_placeholder with chart data
+        const chartComparables = comparables.map((c: any) => ({
+          title: c.title,
+          price: c.price,
+          area: c.area,
+          price_per_sqm: c.price_per_sqm,
+        }));
+
+        await supabase.from("presentation_sections")
+          .update({
+            content: {
+              comparables: chartComparables,
+              owner_expected_price: propertyData.owner_expected_price ? Number(propertyData.owner_expected_price) : null,
+              avg_price: calc.avg_price,
+              median_price: calc.median_price,
+              avg_price_per_sqm: calc.avg_price_per_sqm,
+              status: "completed",
+            } as any,
+          })
+          .eq("presentation_id", pres.id)
+          .eq("section_key", "market_study_placeholder");
       }
     } catch (err: any) {
       toast.error("Erro ao gerar: " + (err.message || "erro desconhecido"));
