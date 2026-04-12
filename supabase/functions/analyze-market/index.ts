@@ -340,6 +340,11 @@ Extraia imóveis que sejam comparáveis relevantes (mesmo tipo, região similar)
         const similarity = computeSimilarity(
           c.area, baseArea, priceSqm, basePriceSqm, c.bedrooms || 0, baseBedrooms
         );
+        // Fallback: use Firecrawl's original URL/portal when AI didn't extract them
+        const resultIdx = (c.result_index || 1) - 1;
+        const originalResult = allSearchResults[resultIdx];
+        const sourceUrl = c.source_url || originalResult?.url || "";
+        const sourceName = c.source_name || originalResult?.portal.name || "";
         return {
           title: c.title,
           price: c.price,
@@ -350,8 +355,8 @@ Extraia imóveis que sejam comparáveis relevantes (mesmo tipo, região similar)
           parking_spots: c.parking_spots || 0,
           address: c.address || "",
           neighborhood: c.neighborhood || property.neighborhood || "",
-          source_url: c.source_url || "",
-          source_name: c.source_name || "",
+          source_url: sourceUrl,
+          source_name: sourceName,
           similarity_score: similarity,
           is_approved: true,
         };
