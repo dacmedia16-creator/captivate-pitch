@@ -30,6 +30,8 @@ export default function MarketStudyResult() {
   const [generatingAI, setGeneratingAI] = useState(false);
   const [exportingPDF, setExportingPDF] = useState(false);
   const [creatingPresentation, setCreatingPresentation] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [creatingPresentation, setCreatingPresentation] = useState(false);
 
   const { data: study, isLoading } = useQuery({
     queryKey: ["market-study", id],
