@@ -195,6 +195,96 @@ export function LayoutPremium({ section, branding }: Props) {
     );
   }
 
+  /* ═══════ OBJECTIVES ALIGNMENT ═══════ */
+  if (section.section_key === "objectives_alignment") {
+    const objectives = c.objectives || [];
+    const iconMap: Record<string, any> = { key: Key, chart: BarChart3, checklist: ClipboardCheck };
+    return (
+      <div className="min-h-[500px] bg-white p-10 flex flex-col justify-center" style={{ fontFamily: FONT }}>
+        <SectionLabel>Nosso compromisso</SectionLabel>
+        <h2 className="slide-title text-[28px] mt-2 mb-8" style={{ color: primary }}>{section.title}</h2>
+        <div className="h-[2px] w-full mb-8" style={{ backgroundColor: accent + "18" }} />
+        <div className="grid grid-cols-3 gap-8">
+          {objectives.map((obj: any, i: number) => {
+            const Icon = iconMap[obj.icon] || Key;
+            return (
+              <div key={i} className="text-center space-y-4 p-6 rounded-xl border" style={{ borderColor: accent + "20" }}>
+                <div className="mx-auto w-14 h-14 rounded-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${accent}15, ${accent}05)` }}>
+                  <Icon className="h-7 w-7" style={{ color: accent }} />
+                </div>
+                <h3 className="font-bold text-[15px]" style={{ color: primary }}>{obj.title}</h3>
+                {obj.description && <p className="text-[12px] leading-relaxed" style={{ color: "#6B7280" }}>{obj.description}</p>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  /* ═══════ AGENCY VALUE PROPOSITION ═══════ */
+  if (section.section_key === "agency_value_proposition") {
+    const props = c.value_propositions || [];
+    const stats = c.global_stats || {};
+    return (
+      <div className="min-h-[500px] p-10" style={{ fontFamily: FONT, background: `linear-gradient(160deg, ${deep} 0%, ${primary} 100%)` }}>
+        <SectionLabel light>Proposta de valor</SectionLabel>
+        <h2 className="slide-title text-[28px] text-white mt-2 mb-8">{section.title}</h2>
+        <div className="h-[2px] w-16 mb-8" style={{ backgroundColor: accent }} />
+        <div className="grid grid-cols-3 gap-6 mb-10">
+          {props.map((p: any, i: number) => (
+            <div key={i} className="border-l-[3px] pl-5 py-2" style={{ borderColor: accent }}>
+              <h3 className="font-bold text-[15px] text-white mb-2">{p.title}</h3>
+              {p.description && <p className="text-[12px] leading-relaxed text-white/50">{p.description}</p>}
+            </div>
+          ))}
+        </div>
+        {(stats.countries > 0 || stats.units > 0 || stats.brokers > 0) && (
+          <div className="flex gap-8 p-6 rounded-lg" style={{ backgroundColor: "rgba(255,255,255,0.08)" }}>
+            {[
+              { label: "Países", value: stats.countries },
+              { label: "Unidades", value: stats.units?.toLocaleString("pt-BR") },
+              { label: "Corretores", value: stats.brokers?.toLocaleString("pt-BR") },
+            ].filter(s => s.value && s.value !== "0").map((s, i) => (
+              <div key={i} className="text-center flex-1">
+                <p className="slide-metric text-[32px]" style={{ color: accent }}>{s.value}</p>
+                <p className="slide-label text-white/35 mt-1">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /* ═══════ REQUIRED DOCUMENTATION ═══════ */
+  if (section.section_key === "required_documentation") {
+    const docs = c.documents || [];
+    return (
+      <div className="min-h-[500px] bg-white p-10" style={{ fontFamily: FONT }}>
+        <SectionLabel>Documentação</SectionLabel>
+        <h2 className="slide-title text-[28px] mt-2 mb-8" style={{ color: primary }}>{section.title}</h2>
+        <div className="h-[2px] w-full mb-8" style={{ backgroundColor: accent + "18" }} />
+        <div className="space-y-3">
+          {docs.map((doc: any, i: number) => (
+            <div key={i} className="flex items-center gap-4 p-4 rounded-lg border" style={{ borderColor: accent + "15" }}>
+              <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: `linear-gradient(135deg, ${doc.required ? accent + "15" : primary + "10"}, transparent)` }}>
+                {doc.required ? <CheckCircle className="h-5 w-5" style={{ color: accent }} /> : <FileText className="h-5 w-5" style={{ color: primary }} />}
+              </div>
+              <p className="font-semibold text-[14px] flex-1" style={{ color: primary }}>{doc.title}</p>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full" style={{
+                backgroundColor: doc.required ? accent + "12" : primary + "08",
+                color: doc.required ? accent : primary,
+              }}>
+                {doc.required ? "Obrigatório" : "Opcional"}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   /* ═══════ GENERIC ═══════ */
   return (
     <div className="min-h-[500px] bg-white p-10" style={{ fontFamily: FONT }}>

@@ -186,6 +186,96 @@ export function LayoutImpactoComercial({ section, branding }: Props) {
     );
   }
 
+  /* ═══════ OBJECTIVES ALIGNMENT ═══════ */
+  if (section.section_key === "objectives_alignment") {
+    const objectives = c.objectives || [];
+    const iconMap: Record<string, any> = { key: Key, chart: BarChart3, checklist: ClipboardCheck };
+    return (
+      <div className="min-h-[500px] bg-white p-10 flex flex-col justify-center" style={{ fontFamily: FONT }}>
+        <SectionLabel>Nosso compromisso</SectionLabel>
+        <h2 className="slide-title text-[28px] uppercase mt-2 mb-8" style={{ color: primary }}>{section.title}</h2>
+        <div className="w-10 h-1 mb-8" style={{ backgroundColor: accent }} />
+        <div className="grid grid-cols-3 gap-6">
+          {objectives.map((obj: any, i: number) => {
+            const Icon = iconMap[obj.icon] || Key;
+            return (
+              <div key={i} className="text-center space-y-4 p-6" style={{ backgroundColor: primary + "06" }}>
+                <div className="mx-auto w-14 h-14 flex items-center justify-center" style={{ backgroundColor: accent }}>
+                  <Icon className="h-7 w-7 text-white" />
+                </div>
+                <h3 className="font-bold text-[15px] uppercase tracking-wider" style={{ color: primary }}>{obj.title}</h3>
+                {obj.description && <p className="text-[12px] leading-relaxed" style={{ color: "#6B7280" }}>{obj.description}</p>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  /* ═══════ AGENCY VALUE PROPOSITION ═══════ */
+  if (section.section_key === "agency_value_proposition") {
+    const props = c.value_propositions || [];
+    const stats = c.global_stats || {};
+    return (
+      <div className="min-h-[500px] text-white p-10" style={{ backgroundColor: DEEP, fontFamily: FONT }}>
+        <SectionLabel light>Proposta de valor</SectionLabel>
+        <h2 className="slide-title text-[28px] text-white uppercase mt-2 mb-8">{section.title}</h2>
+        <div className="w-10 h-1 mb-8" style={{ backgroundColor: accent }} />
+        <div className="grid grid-cols-3 gap-6 mb-10">
+          {props.map((p: any, i: number) => (
+            <div key={i} className="py-4 border-t-2" style={{ borderColor: accent }}>
+              <h3 className="font-bold text-[15px] uppercase tracking-wider mb-2" style={{ color: accent }}>{p.title}</h3>
+              {p.description && <p className="text-[12px] leading-relaxed text-white/50">{p.description}</p>}
+            </div>
+          ))}
+        </div>
+        {(stats.countries > 0 || stats.units > 0 || stats.brokers > 0) && (
+          <div className="flex gap-6">
+            {[
+              { label: "PAÍSES", value: stats.countries },
+              { label: "UNIDADES", value: stats.units?.toLocaleString("pt-BR") },
+              { label: "CORRETORES", value: stats.brokers?.toLocaleString("pt-BR") },
+            ].filter(s => s.value && s.value !== "0").map((s, i) => (
+              <div key={i} className="flex-1 text-center py-6" style={{ backgroundColor: accent }}>
+                <p className="slide-metric text-[34px] text-white">{s.value}</p>
+                <p className="text-[9px] uppercase tracking-[0.25em] text-white/80 mt-1">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /* ═══════ REQUIRED DOCUMENTATION ═══════ */
+  if (section.section_key === "required_documentation") {
+    const docs = c.documents || [];
+    return (
+      <div className="min-h-[500px] bg-white p-10" style={{ fontFamily: FONT }}>
+        <SectionLabel>Documentação</SectionLabel>
+        <h2 className="slide-title text-[28px] uppercase mt-2 mb-8" style={{ color: primary }}>{section.title}</h2>
+        <div className="w-10 h-1 mb-8" style={{ backgroundColor: accent }} />
+        <div className="space-y-3">
+          {docs.map((doc: any, i: number) => (
+            <div key={i} className="flex items-center gap-4 p-4 border-b border-gray-100 last:border-0">
+              <div className="w-10 h-10 flex items-center justify-center shrink-0" style={{ backgroundColor: doc.required ? accent : primary + "15" }}>
+                {doc.required ? <CheckCircle className="h-5 w-5 text-white" /> : <FileText className="h-5 w-5" style={{ color: primary }} />}
+              </div>
+              <p className="font-bold text-[14px] flex-1 uppercase tracking-wider" style={{ color: primary }}>{doc.title}</p>
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] px-3 py-1" style={{
+                backgroundColor: doc.required ? accent + "15" : primary + "08",
+                color: doc.required ? accent : primary,
+              }}>
+                {doc.required ? "Obrigatório" : "Opcional"}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   /* ═══════ GENERIC ═══════ */
   return (
     <div className="min-h-[500px] bg-white p-10" style={{ fontFamily: FONT }}>
