@@ -536,6 +536,11 @@ Extraia todos os imóveis relevantes. Descarte apenas se claramente incompatíve
 
     const validComparables: any[] = [];
 
+    const maxAgeMonths = Number(filters.maxListingAgeMonths) || 0;
+    const cutoffDate = maxAgeMonths > 0
+      ? new Date(Date.now() - maxAgeMonths * 30 * 24 * 60 * 60 * 1000)
+      : null;
+
     for (const c of (extracted.comparables || [])) {
       if (!c.price || c.price <= 0 || !c.area || c.area <= 0) {
         discardReasons.push({
@@ -544,6 +549,20 @@ Extraia todos os imóveis relevantes. Descarte apenas se claramente incompatíve
           reason: "Preço ou área não disponível",
         });
         continue;
+      }
+
+      // Filter by listing age
+      if (cutoffDate && c.listing_date) {
+        const listingDate = new Date(c.listing_date);
+        if (!isNaN(listingDate.getTime()) && listingDate < cutoffDate) {
+          const ageMonths = Math.round((Date.now() - listingDate.getTime()) / (30 * 24 * 60 * 60 * 1000));
+          discardReasons.push({
+            url: c.source_url || "unknown",
+            portal: c.source_name || "unknown",
+            reason: `Anúncio muito antigo (criado há ${ageMonths} meses)`,
+          });
+          continue;
+        }
       }
 
       if (isDuplicate(c, validComparables)) {
