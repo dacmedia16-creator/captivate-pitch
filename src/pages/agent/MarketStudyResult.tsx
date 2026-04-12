@@ -8,8 +8,9 @@ import {
   ArrowLeft, Loader2, FileText, Building2, ThumbsUp, ThumbsDown,
   RefreshCw, Sparkles, TrendingUp, DollarSign, BarChart3, Home,
   FileDown, Presentation, ScatterChart, ExternalLink, Search,
-  AlertTriangle, CheckCircle, XCircle, Clock,
+  AlertTriangle, CheckCircle, XCircle, Clock, Trash2,
 } from "lucide-react";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { AdjustmentBadge } from "@/components/market-study/AdjustmentBadge";
 import { PriceRangeGauge } from "@/components/market-study/PriceRangeGauge";
 import { MarketInsights, generateAutoInsights } from "@/components/market-study/MarketInsights";
