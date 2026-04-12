@@ -94,10 +94,14 @@ export default function AgentNewPresentation() {
       if (presError || !pres) throw presError || new Error("Erro ao criar apresentação");
 
       // Save photos and market job in parallel
+      let marketReport: any = null;
+      let generatedComparables: any[] = [];
+      let marketCalc: any = null;
+
       const photosPromise = propertyData.photos.length > 0
         ? supabase.from("presentation_images").insert(
             propertyData.photos.map((url, i) => ({ presentation_id: pres.id, image_url: url, sort_order: i }))
-          )
+          ).then(() => null)
         : Promise.resolve(null);
 
       let portalSourcesPromise: Promise<any> = Promise.resolve(null);
