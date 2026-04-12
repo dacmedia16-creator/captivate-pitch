@@ -1,60 +1,73 @@
 
 
-# Fase 1 — 3 Novas Seções de Apresentação
+# Fase 2 — Estatísticas Institucionais + Mapa do Brasil
 
-## Arquivos a criar
-Nenhum novo arquivo de componente necessário — as seções serão renderizadas pelos layouts existentes (blocos dedicados + fallback genérico).
+## Resumo
+
+Enriquecer as 3 seções `about_global`, `about_national` e `about_regional` com blocos de estatísticas JSONB dedicados. Criar componente de mapa do Brasil para a seção nacional. Adicionar campos de edição no CompanyBranding.
+
+## Mapa do Brasil
+
+Implementar agora como SVG inline simplificado (paths dos 27 estados). Componente `BrazilPresenceMap.tsx` renderiza estados destacados com base em array de siglas. Se não houver dados de presença, o mapa não aparece. Sem dependência externa, compatível com PDF export.
+
+## Migration SQL
+
+```sql
+ALTER TABLE agency_profiles ADD COLUMN IF NOT EXISTS about_global_stats jsonb DEFAULT NULL;
+ALTER TABLE agency_profiles ADD COLUMN IF NOT EXISTS about_national_stats jsonb DEFAULT NULL;
+ALTER TABLE agency_profiles ADD COLUMN IF NOT EXISTS about_regional_stats jsonb DEFAULT NULL;
+```
 
 ## Arquivos a alterar
 
 | Arquivo | Mudança |
 |---|---|
-| **Migration SQL** | Adicionar 3 colunas JSONB em `agency_profiles`: `objectives`, `value_propositions`, `global_stats`. Adicionar 1 coluna JSONB em `presentations`: `required_documents`. |
-| **`src/hooks/useGeneratePresentation.ts`** | Reordenar SECTION_DEFINITIONS para 15 seções. Adicionar cases para `objectives_alignment`, `agency_value_proposition`, `required_documentation` com defaults seguros. |
-| **`src/components/layouts/LayoutExecutivo.tsx`** | Adicionar 3 blocos de renderização dedicados para as novas seções. |
+| **`src/hooks/useGeneratePresentation.ts`** | Linhas 119-126: adicionar `stats` aos cases `about_global`, `about_national`, `about_regional` usando `agencyAny?.about_global_stats` etc. |
+| **`src/components/layouts/LayoutExecutivo.tsx`** | No bloco genérico (fallback): adicionar renderização de `c.stats` como grid de métricas quando presente. Criar bloco dedicado para `about_national` com mapa. |
 | **`src/components/layouts/LayoutPremium.tsx`** | Idem. |
 | **`src/components/layouts/LayoutImpactoComercial.tsx`** | Idem. |
-| **`src/components/editor/EditPanel.tsx`** | Adicionar ícones e campos de edição para as 3 novas seções (objectives, value_propositions, required_documents). |
-| **`src/pages/company/CompanyBranding.tsx`** | Adicionar 2 novas tabs: "Objetivos" e "Proposta de Valor" para editar `objectives`, `value_propositions` e `global_stats`. |
+| **`src/pages/company/CompanyBranding.tsx`** | Nas tabs "Mundial", "Nacional", "Regional": adicionar campos para stats (agencies, brokers, rank, franchises, presence_text). Na tab "Nacional": adicionar campo para estados com presença. |
+
+## Arquivo a criar
+
+| Arquivo | Descrição |
+|---|---|
+| **`src/components/charts/BrazilPresenceMap.tsx`** | SVG do Brasil com 27 estados. Props: `states` (siglas ativas), `primaryColor`, `accentColor`. Estados ativos com cor accent, inativos cinza claro. |
 
 ## Detalhes técnicos
 
-### Migration SQL
-```sql
-ALTER TABLE agency_profiles ADD COLUMN IF NOT EXISTS objectives jsonb DEFAULT NULL;
-ALTER TABLE agency_profiles ADD COLUMN IF NOT EXISTS value_propositions jsonb DEFAULT NULL;
-ALTER TABLE agency_profiles ADD COLUMN IF NOT EXISTS global_stats jsonb DEFAULT NULL;
-ALTER TABLE presentations ADD COLUMN IF NOT EXISTS required_documents jsonb DEFAULT NULL;
-```
-Sem impacto em dados existentes — todas nullable com default NULL.
-
-### useGeneratePresentation.ts — Nova ordem
-```
-cover (0), objectives_alignment (1), agency_value_proposition (2),
-broker_intro (3), about_global (4), about_national (5), about_regional (6),
-property_summary (7), marketing_plan (8), differentials (9), results (10),
-market_study_placeholder (11), pricing_scenarios (12),
-required_documentation (13), closing (14)
+### useGeneratePresentation.ts — mudanças nos 3 cases
+```typescript
+case "about_global":
+  content = { text: agency?.about_global, stats: agencyAny?.about_global_stats, logo_url: agency?.logo_url, image_url: agencyAny?.about_global_image_url };
+  break;
+case "about_national":
+  content = { text: agency?.about_national, stats: agencyAny?.about_national_stats, logo_url: agency?.logo_url, image_url: agencyAny?.about_national_image_url };
+  break;
+case "about_regional":
+  content = { text: agency?.about_regional, stats: agencyAny?.about_regional_stats, regional_numbers: agency?.regional_numbers, branch_photo_url: agency?.branch_photo_url, image_url: agencyAny?.about_regional_image_url };
+  break;
 ```
 
-Defaults seguros para cada seção quando dados não existem:
-- **objectives_alignment**: 3 objetivos padrão (Vender, Melhor preço, Comodidade)
-- **agency_value_proposition**: 3 propostas padrão + stats globais zerados
-- **required_documentation**: 5 documentos padrão
+### Layouts — renderização de stats
+Nos 3 layouts, substituir o bloco genérico/fallback por blocos dedicados para `about_global`, `about_national`, `about_regional` que:
+1. Renderizam `c.text` e `c.image_url` como hoje
+2. Se `c.stats` existir, exibem grid de métricas (agencies, brokers, rank, franchises, presence_text)
+3. Para `about_national`: incluem `BrazilPresenceMap` se `c.stats?.presence_states` existir
 
-### Layouts — Renderização das 3 seções
-Cada layout terá blocos `if (section.section_key === "...")` com visual consistente:
+### CompanyBranding — campos de stats
+Na tab "Mundial", "Nacional" e "Regional", adicionar seção colapsável "Estatísticas" com inputs para: agencies, brokers, rank, franchises, presence_text. Na tab "Nacional", campo adicional para lista de estados com presença.
 
-- **objectives_alignment**: 3 cards lado a lado com ícone lucide, título e descrição
-- **agency_value_proposition**: Grid de propostas + bloco de stats globais (países, unidades, corretores)
-- **required_documentation**: Checklist visual com ícone de documento e badge required/optional
+### agencyForm state
+Adicionar: `about_global_stats`, `about_national_stats`, `about_regional_stats` ao state inicial.
 
-### Compatibilidade
-- Apresentações antigas não terão essas seções (nunca foram inseridas em `presentation_sections`), portanto **zero risco de quebra**
-- Novas apresentações gerarão as 15 seções completas
-- A geração usa `agency?.objectives || DEFAULT` — se campo não preenchido, usa defaults
+## Compatibilidade
+- Colunas nullable com default NULL — zero impacto em dados existentes
+- Stats só renderizam se existirem (`c.stats && ...`)
+- Mapa só aparece se `presence_states` tiver dados
+- Apresentações antigas não têm `stats` no content JSON — fallback seguro
+- Não altera Fase 1 (objectives, value_proposition, required_documentation)
 
-### Riscos
-- **Nenhum risco alto**: colunas nullable, defaults seguros, seções antigas não afetadas
-- **Risco baixo**: sort_order de seções antigas (0-11) ficará diferente do novo (0-14), mas isso é por design — cada apresentação mantém a ordem com que foi gerada
+## Riscos
+- Nenhum risco alto. SVG inline do mapa é estático e compatível com PDF export.
 
