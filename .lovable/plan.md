@@ -1,38 +1,41 @@
 
 
-# Adicionar Min/Max de Comparáveis + Links dos Portais
+# Adicionar Preferência "Mesmo Condomínio"
 
 ## O que muda
 
-### 1. Trocar "Nº de comparáveis" por Min e Max
+### 1. Novo campo `preferSameCondominium` na interface e UI
 
 **Arquivo:** `src/components/wizard/StepMarketStudy.tsx`
 
-- Substituir o campo único `maxComparables` por dois campos: `minComparables` e `maxComparables` (inputs numéricos lado a lado)
-- Labels: "Mín. de imóveis" e "Máx. de imóveis"
+- Adicionar `preferSameCondominium: boolean` à interface `MarketStudyData`
+- Adicionar um novo card ou item dentro do card "Filtros de pesquisa" com um Switch: **"Priorizar imóveis no mesmo condomínio"** com descrição explicativa
 
-**Arquivo:** `src/components/wizard/StepMarketStudy.tsx` (interface `MarketStudyData`)
-
-- Adicionar `minComparables: string` à interface
-
-### 2. Mostrar links dos portais habilitados
-
-**Arquivo:** `src/components/wizard/StepMarketStudy.tsx`
-
-- Nos itens de portais, exibir o `base_url` do portal como link clicável (abre em nova aba) para o corretor conferir antes de gerar
-- Usar o campo `portal_sources.base_url` que já vem no join
-
-### 3. Atualizar estado inicial e filtros enviados
+### 2. Estado inicial
 
 **Arquivo:** `src/pages/agent/AgentNewPresentation.tsx`
 
-- Adicionar `minComparables: "5"` ao `emptyMarket`
-- Passar `minComparables` nos filtros do `market_analysis_jobs` e no body das edge functions
+- Adicionar `preferSameCondominium: false` ao `emptyMarket`
+- Passar esse flag nos filtros enviados ao `market_analysis_jobs` e à edge function `analyze-market`
+
+### 3. Usar a preferência no scraping/IA
+
+**Arquivo:** `supabase/functions/analyze-market/index.ts`
+
+- Quando `filters.preferSameCondominium === true` e `property.condominium` estiver preenchido, adicionar o nome do condomínio à query de busca do Firecrawl para priorizar resultados do mesmo condomínio
+- No prompt do AI, instruir para dar preferência a imóveis do mesmo condomínio
+
+### 4. Boost de similaridade
+
+**Arquivo:** `supabase/functions/analyze-market/index.ts`
+
+- Na função `computeSimilarity`, quando `preferSameCondominium` estiver ativo e o comparable tiver o mesmo condomínio (extraído pela IA), adicionar +10 pontos de similaridade
 
 ## Arquivos
 
 | Arquivo | Ação |
 |---------|------|
-| `src/components/wizard/StepMarketStudy.tsx` | Modificar — interface + UI (min/max inputs + links) |
-| `src/pages/agent/AgentNewPresentation.tsx` | Modificar — emptyMarket + filtros |
+| `src/components/wizard/StepMarketStudy.tsx` | Modificar — adicionar `preferSameCondominium` à interface + Switch na UI |
+| `src/pages/agent/AgentNewPresentation.tsx` | Modificar — `emptyMarket` + filtros |
+| `supabase/functions/analyze-market/index.ts` | Modificar — query de busca + prompt + similaridade |
 
