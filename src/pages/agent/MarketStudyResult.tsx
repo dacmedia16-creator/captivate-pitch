@@ -13,6 +13,7 @@ import { AdjustmentBadge } from "@/components/market-study/AdjustmentBadge";
 import { PriceRangeGauge } from "@/components/market-study/PriceRangeGauge";
 import { MarketInsights, generateAutoInsights } from "@/components/market-study/MarketInsights";
 import { PricePerSqmChart } from "@/components/market-study/PricePerSqmChart";
+import { MarketScatterChart, ComparableChartData } from "@/components/charts/MarketCharts";
 import { MetricCard } from "@/components/shared/MetricCard";
 import { scoredComparables } from "@/hooks/useMarketSimilarity";
 import { calculateAllAdjustments, calculateMarketResult } from "@/hooks/useMarketAdjustments";
