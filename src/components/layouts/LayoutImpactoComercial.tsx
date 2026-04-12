@@ -196,6 +196,16 @@ export function LayoutImpactoComercial({ section, branding }: Props) {
       {c.image_url && <img src={c.image_url} alt="" className="max-h-64 object-cover w-full rounded-lg mt-4" />}
       {c.branch_photo_url && <img src={c.branch_photo_url} alt="" className="max-h-64 object-cover w-full rounded-lg mt-4" />}
 
+      {c.regional_numbers && (
+        <div className="flex flex-wrap gap-6 mt-5">
+          {c.regional_numbers.split("|").map((item: string, i: number) => (
+            <div key={i} className="px-5 py-3" style={{ backgroundColor: accent + "12" }}>
+              <p className="font-bold text-[15px]" style={{ color: primary }}>{item.trim()}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {c.actions && (
         <div className="grid grid-cols-2 gap-x-8 gap-y-5">
           {c.actions.map((a: any, i: number) => (
