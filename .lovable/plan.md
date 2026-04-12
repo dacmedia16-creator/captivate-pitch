@@ -1,14 +1,26 @@
 
 
-# Alterar Padrão do Filtro de Idade do Anúncio para 12 meses
+# Expandir Lista de Diferenciais do Imóvel
 
-Mudança simples: trocar o valor default de `maxListingAgeMonths` de `"6"` para `"12"` em dois lugares.
+Adicionar mais opções de diferenciais à lista `DIFFERENTIALS` em `SubjectPropertyForm.tsx`.
 
-## Alterações
+## Alteração
 
-### 1. `src/pages/agent/AgentNewPresentation.tsx` (linha 43)
-- Alterar `maxListingAgeMonths: "6"` → `maxListingAgeMonths: "12"`
+**`src/components/market-study/SubjectPropertyForm.tsx`** (linha 38-42) — expandir o array `DIFFERENTIALS`:
 
-### 2. `src/components/market-study/SearchConfigForm.tsx`
-- Verificar se há valor default e alterar para `12` também
+```typescript
+const DIFFERENTIALS = [
+  "Piscina", "Área Gourmet", "Escritório", "Energia Solar", "Automação",
+  "Planejados", "Vista Privilegiada", "Esquina", "Quintal Amplo", "Varanda",
+  "Elevador", "Mobiliado", "Quadra", "Churrasqueira", "Sauna", "Academia",
+  "Salão de Festas", "Playground", "Brinquedoteca", "Portaria 24h",
+  "Jardim", "Lavabo", "Despensa", "Closet", "Aquecimento Central",
+  "Ar Condicionado", "Lareira", "Depósito", "Coworking", "Pet Place",
+  "Bicicletário", "Spa",
+];
+```
+
+Novos itens: Quadra, Churrasqueira, Sauna, Academia, Salão de Festas, Playground, Brinquedoteca, Portaria 24h, Jardim, Lavabo, Despensa, Closet, Aquecimento Central, Ar Condicionado, Lareira, Depósito, Coworking, Pet Place, Bicicletário, Spa.
+
+Ajustar o grid para `md:grid-cols-5` para acomodar mais itens.
 
