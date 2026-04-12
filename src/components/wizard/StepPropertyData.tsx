@@ -1,10 +1,12 @@
+import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ImageUploader } from "@/components/shared/ImageUploader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { X, Tag, MapPin, Ruler, Star, Camera } from "lucide-react";
+import { X, Tag, MapPin, Ruler, Star, Camera, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export interface PropertyData {
   title: string; owner_name: string; property_type: string; property_purpose: string;
@@ -20,9 +22,40 @@ interface StepPropertyDataProps {
 }
 
 export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
+  const [cepLoading, setCepLoading] = useState(false);
+
   const update = (field: keyof PropertyData, value: string) => {
     onChange({ ...data, [field]: value });
   };
+
+  const handleCepChange = useCallback(async (rawValue: string) => {
+    const digits = rawValue.replace(/\D/g, "").slice(0, 8);
+    const masked = digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
+    onChange({ ...data, cep: masked });
+
+    if (digits.length === 8) {
+      setCepLoading(true);
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+        const json = await res.json();
+        if (json.erro) {
+          toast.error("CEP não encontrado");
+        } else {
+          onChange({
+            ...data,
+            cep: masked,
+            address: json.logradouro || data.address,
+            neighborhood: json.bairro || data.neighborhood,
+            city: json.localidade || data.city,
+          });
+        }
+      } catch {
+        toast.error("Erro ao buscar CEP");
+      } finally {
+        setCepLoading(false);
+      }
+    }
+  }, [data, onChange]);
 
   const addPhoto = (url: string | null) => {
     if (url) onChange({ ...data, photos: [...data.photos, url] });
@@ -107,7 +140,18 @@ export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">CEP</Label>
-            <Input value={data.cep} onChange={e => update("cep", e.target.value)} placeholder="00000-000" className="h-10" />
+            <div className="relative">
+              <Input
+                value={data.cep}
+                onChange={e => handleCepChange(e.target.value)}
+                placeholder="00000-000"
+                maxLength={9}
+                className="h-10 pr-8"
+              />
+              {cepLoading && (
+                <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
