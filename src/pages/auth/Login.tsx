@@ -39,10 +39,10 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, hsl(215 30% 12%) 0%, hsl(213 55% 20%) 50%, hsl(215 30% 16%) 100%)' }}>
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, hsl(216 100% 12%) 0%, hsl(216 100% 32%) 50%, hsl(216 100% 18%) 100%)' }}>
       {/* Decorative elements */}
-      <div className="absolute top-0 right-0 w-96 h-96 rounded-full opacity-10" style={{ background: 'radial-gradient(circle, hsl(42 55% 54%), transparent)' }} />
-      <div className="absolute bottom-0 left-0 w-72 h-72 rounded-full opacity-5" style={{ background: 'radial-gradient(circle, hsl(42 55% 54%), transparent)' }} />
+      <div className="absolute top-0 right-0 w-96 h-96 rounded-full opacity-10" style={{ background: 'radial-gradient(circle, hsl(352 83% 47%), transparent)' }} />
+      <div className="absolute bottom-0 left-0 w-72 h-72 rounded-full opacity-5" style={{ background: 'radial-gradient(circle, hsl(352 83% 47%), transparent)' }} />
 
       <Card className="w-full max-w-md bg-card/95 backdrop-blur-xl border-border/30 shadow-2xl relative z-10">
         <CardHeader className="text-center space-y-5 pb-2 pt-8">
