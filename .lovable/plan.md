@@ -1,61 +1,60 @@
 
 
-# Auditoria: Dados de Marca Não Usados nos Slides
+# Fase 1 — 3 Novas Seções de Apresentação
 
-## Problemas Encontrados
+## Arquivos a criar
+Nenhum novo arquivo de componente necessário — as seções serão renderizadas pelos layouts existentes (blocos dedicados + fallback genérico).
 
-Após análise do fluxo `agency_profiles` → `useGeneratePresentation` → layouts, identifiquei **3 problemas**:
+## Arquivos a alterar
 
-### 1. `regional_numbers` nunca é renderizado nos slides
-O campo é salvo corretamente no content da seção `about_regional` (ex: `"500+ imóveis vendidos | R$ 2bi em VGV | 15 anos de mercado"`), mas **nenhum dos 3 layouts** renderiza `c.regional_numbers`. O dado existe no JSON mas é ignorado na renderização.
+| Arquivo | Mudança |
+|---|---|
+| **Migration SQL** | Adicionar 3 colunas JSONB em `agency_profiles`: `objectives`, `value_propositions`, `global_stats`. Adicionar 1 coluna JSONB em `presentations`: `required_documents`. |
+| **`src/hooks/useGeneratePresentation.ts`** | Reordenar SECTION_DEFINITIONS para 15 seções. Adicionar cases para `objectives_alignment`, `agency_value_proposition`, `required_documentation` com defaults seguros. |
+| **`src/components/layouts/LayoutExecutivo.tsx`** | Adicionar 3 blocos de renderização dedicados para as novas seções. |
+| **`src/components/layouts/LayoutPremium.tsx`** | Idem. |
+| **`src/components/layouts/LayoutImpactoComercial.tsx`** | Idem. |
+| **`src/components/editor/EditPanel.tsx`** | Adicionar ícones e campos de edição para as 3 novas seções (objectives, value_propositions, required_documents). |
+| **`src/pages/company/CompanyBranding.tsx`** | Adicionar 2 novas tabs: "Objetivos" e "Proposta de Valor" para editar `objectives`, `value_propositions` e `global_stats`. |
 
-### 2. Apresentações antigas não têm `image_url` nas seções about_*
-O código de geração (`useGeneratePresentation.ts`) foi corrigido recentemente para incluir `image_url` (linhas 79-85), mas todas as apresentações já geradas **não possuem esse campo** no content JSON. Confirmado no banco: as seções `about_global` e `about_national` têm apenas `logo_url` + `text`, sem `image_url`.
+## Detalhes técnicos
 
-### 3. `about_regional` não inclui `image_url` nas apresentações antigas
-Mesmo problema — o campo `about_regional_image_url` foi adicionado depois e não está no content das apresentações existentes.
-
-## Plano de Correção
-
-### 1. Adicionar renderização de `regional_numbers` nos 3 layouts
-Nos blocos genéricos (que renderizam `about_regional`), adicionar após `c.text`:
-```tsx
-{c.regional_numbers && (
-  <div className="flex flex-wrap gap-6 mt-4">
-    {c.regional_numbers.split("|").map((item, i) => (
-      <div key={i} className="text-center">
-        <p className="font-bold text-lg" style={{ color: primary }}>{item.trim()}</p>
-      </div>
-    ))}
-  </div>
-)}
-```
-**Arquivos**: `LayoutExecutivo.tsx`, `LayoutPremium.tsx`, `LayoutImpactoComercial.tsx`
-
-### 2. Corrigir apresentações existentes (sem regenerar)
-Criar um script/migração SQL que atualiza o content JSON das seções `about_global`, `about_national` e `about_regional` existentes, injetando os campos `image_url` a partir da tabela `agency_profiles` do mesmo tenant.
-
+### Migration SQL
 ```sql
-UPDATE presentation_sections ps
-SET content = ps.content || jsonb_build_object('image_url', ap.about_global_image_url)
-FROM presentations p, agency_profiles ap
-WHERE ps.presentation_id = p.id
-  AND ap.tenant_id = p.tenant_id
-  AND ps.section_key = 'about_global'
-  AND ap.about_global_image_url IS NOT NULL
-  AND (ps.content->>'image_url') IS NULL;
+ALTER TABLE agency_profiles ADD COLUMN IF NOT EXISTS objectives jsonb DEFAULT NULL;
+ALTER TABLE agency_profiles ADD COLUMN IF NOT EXISTS value_propositions jsonb DEFAULT NULL;
+ALTER TABLE agency_profiles ADD COLUMN IF NOT EXISTS global_stats jsonb DEFAULT NULL;
+ALTER TABLE presentations ADD COLUMN IF NOT EXISTS required_documents jsonb DEFAULT NULL;
 ```
-(Repetir para `about_national` e `about_regional`)
+Sem impacto em dados existentes — todas nullable com default NULL.
 
-### 3. Sem outras alterações
-- Geração de **novas** apresentações já inclui `image_url` corretamente
-- `branch_photo_url` já funciona no `about_regional`
-- `logo_url`, `company_name`, cores — tudo OK
-- Não alterar RLS, auth ou lógica de negócio
+### useGeneratePresentation.ts — Nova ordem
+```
+cover (0), objectives_alignment (1), agency_value_proposition (2),
+broker_intro (3), about_global (4), about_national (5), about_regional (6),
+property_summary (7), marketing_plan (8), differentials (9), results (10),
+market_study_placeholder (11), pricing_scenarios (12),
+required_documentation (13), closing (14)
+```
 
-## Arquivos a editar
-1. `src/components/layouts/LayoutExecutivo.tsx` — adicionar `regional_numbers`
-2. `src/components/layouts/LayoutPremium.tsx` — adicionar `regional_numbers`
-3. `src/components/layouts/LayoutImpactoComercial.tsx` — adicionar `regional_numbers`
-4. Migração SQL — backfill `image_url` nas seções existentes
+Defaults seguros para cada seção quando dados não existem:
+- **objectives_alignment**: 3 objetivos padrão (Vender, Melhor preço, Comodidade)
+- **agency_value_proposition**: 3 propostas padrão + stats globais zerados
+- **required_documentation**: 5 documentos padrão
+
+### Layouts — Renderização das 3 seções
+Cada layout terá blocos `if (section.section_key === "...")` com visual consistente:
+
+- **objectives_alignment**: 3 cards lado a lado com ícone lucide, título e descrição
+- **agency_value_proposition**: Grid de propostas + bloco de stats globais (países, unidades, corretores)
+- **required_documentation**: Checklist visual com ícone de documento e badge required/optional
+
+### Compatibilidade
+- Apresentações antigas não terão essas seções (nunca foram inseridas em `presentation_sections`), portanto **zero risco de quebra**
+- Novas apresentações gerarão as 15 seções completas
+- A geração usa `agency?.objectives || DEFAULT` — se campo não preenchido, usa defaults
+
+### Riscos
+- **Nenhum risco alto**: colunas nullable, defaults seguros, seções antigas não afetadas
+- **Risco baixo**: sort_order de seções antigas (0-11) ficará diferente do novo (0-14), mas isso é por design — cada apresentação mantém a ordem com que foi gerada
 
