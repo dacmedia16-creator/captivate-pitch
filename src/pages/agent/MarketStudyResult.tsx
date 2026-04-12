@@ -213,7 +213,7 @@ export default function MarketStudyResult() {
       if (presErr || !pres) throw presErr || new Error("Erro ao criar apresentação");
 
       // Create sections
-      const sections = [
+      const sections: Array<{ presentation_id: string; section_key: string; title: string; sort_order: number; content: any }> = [
         {
           presentation_id: pres.id,
           section_key: "property_summary",
