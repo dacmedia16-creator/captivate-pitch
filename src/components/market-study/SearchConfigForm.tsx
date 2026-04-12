@@ -1,8 +1,12 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export interface SearchConfigData {
   same_condominium: boolean;
@@ -11,6 +15,7 @@ export interface SearchConfigData {
   price_range_pct: number;
   max_comparables: number;
   min_similarity: number;
+  selectedPortals: string[];
 }
 
 interface Props {
@@ -19,11 +24,69 @@ interface Props {
 }
 
 export function SearchConfigForm({ data, onChange }: Props) {
+  const { profile } = useAuth();
   const set = (field: keyof SearchConfigData, value: any) =>
     onChange({ ...data, [field]: value });
 
+  const { data: portalSettings, isLoading: loadingPortals } = useQuery({
+    queryKey: ["tenant-portals-market-study", profile?.tenant_id],
+    queryFn: async () => {
+      if (!profile?.tenant_id) return [];
+      const { data: settings } = await supabase
+        .from("tenant_portal_settings")
+        .select("*, portal_sources(*)")
+        .eq("tenant_id", profile.tenant_id)
+        .eq("is_enabled", true)
+        .order("priority");
+      return settings || [];
+    },
+    enabled: !!profile?.tenant_id,
+  });
+
+  const togglePortal = (portalId: string) => {
+    const selected = data.selectedPortals.includes(portalId)
+      ? data.selectedPortals.filter((id) => id !== portalId)
+      : [...data.selectedPortals, portalId];
+    set("selectedPortals", selected);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Portais de pesquisa */}
+      <Card className="glass-card">
+        <CardHeader>
+          <CardTitle className="text-lg">Portais de Pesquisa</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {loadingPortals ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-10" />
+            ))
+          ) : portalSettings && portalSettings.length > 0 ? (
+            portalSettings.map((ps: any) => (
+              <div
+                key={ps.id}
+                className="flex items-center justify-between p-3 rounded-lg border border-border"
+              >
+                <span className="font-medium">
+                  {ps.portal_sources?.name || "Portal"}
+                </span>
+                <Switch
+                  checked={data.selectedPortals.includes(ps.portal_source_id)}
+                  onCheckedChange={() => togglePortal(ps.portal_source_id)}
+                />
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Nenhum portal configurado pela imobiliária. Serão usados portais
+              padrão (ZAP, Viva Real, OLX).
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Filtros de pesquisa */}
       <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-lg">Filtros de Pesquisa</CardTitle>
