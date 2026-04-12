@@ -272,7 +272,9 @@ export default function AgentNewPresentation() {
     } catch (err: any) {
       toast.error("Erro ao gerar: " + (err.message || "erro desconhecido"));
       setIsGenerating(false);
+      return;
     }
+    setGenerationDone(true);
   };
 
   const handleAnimationDone = () => {
@@ -303,7 +305,7 @@ export default function AgentNewPresentation() {
       {step === 0 && <StepPropertyData data={propertyData} onChange={setPropertyData} />}
       {step === 1 && <StepLayoutStyle data={layoutData} onChange={setLayoutData} />}
       {step === 2 && <StepMarketStudy data={marketData} onChange={setMarketData} />}
-      {step === 3 && <StepGeneration isGenerating={isGenerating} isComplete={isComplete} onAnimationDone={handleAnimationDone} />}
+      {step === 3 && <StepGeneration isGenerating={isGenerating} isComplete={isComplete} generationDone={generationDone} onAnimationDone={handleAnimationDone} />}
 
       {step < 3 && (
         <div className="flex justify-between max-w-4xl mx-auto">
