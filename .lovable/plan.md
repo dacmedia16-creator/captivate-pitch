@@ -1,58 +1,65 @@
 
 
-# Nucleo do Produto — Status
+# Estudo de Mercado, IA, PDF e Link Compartilhavel — Plano
 
-## Tudo ja esta implementado
+## Status Atual
 
-Apos revisao completa do codigo, **todos os itens solicitados ja existem e estao funcionais**:
+A maioria dos itens ja esta implementada:
 
-### Dashboard do Corretor (`AgentDashboard.tsx`)
-- 5 metric cards: total, mes, PDFs, estudos, modelos
-- Botao "Nova Apresentacao"
-- Lista de apresentacoes recentes com status
-- Lista de rascunhos
+- **MarketStudyDetail.tsx**: tabela de comparaveis com score, preco, area, quartos, vagas, imagem, fonte, aprovar/remover, adicionar manualmente, calculos automaticos, 3 cards de cenario
+- **generate-presentation-text**: edge function com Lovable AI Gateway (Gemini), tool calling para gerar resumo do imovel, perfil comprador, analise mercado, justificativa preco, cenarios, fechamento
+- **export-pdf**: edge function que gera HTML estilizado e salva no storage
+- **SharedPresentation.tsx**: rota publica `/share/:token` com branding
+- **PresentationEditor.tsx**: botoes de exportar PDF, compartilhar, gerar IA, duplicar, salvar modelo
+- **useAuditLog.ts**: funcao `logAudit` usada em criacao, edicao, geracao IA, exportacao PDF
 
-### Wizard Nova Apresentacao (`AgentNewPresentation.tsx`)
-- **Etapa 1** — Dados do imovel (`StepPropertyData.tsx`): todos os campos solicitados (titulo, proprietario, tipo, finalidade, endereco, cidade, bairro, condominio, CEP, areas, dormitorios, suites, banheiros, vagas, padrao, idade, diferenciais, valor pretendido, observacoes, upload de fotos)
-- **Etapa 2** — Layout e estilo (`StepLayoutStyle.tsx`): 3 layouts (executivo, premium, impacto), 4 tons, 3 modos
-- **Etapa 3** — Estudo de mercado (`StepMarketStudy.tsx`): portais, raio, faixas, comparaveis
-- **Etapa 4** — Geracao (`StepGeneration.tsx`): loading premium com 4 estagios animados
+## Pendencias Identificadas
 
-### Geracao Automatica (`useGeneratePresentation.ts`)
-- Busca perfil do corretor, imobiliaria, branding, marketing, diferenciais, resultados, depoimentos
-- Gera 12 sections: capa, corretor, global, nacional, regional, resumo imovel, marketing, diferenciais, resultados, estudo mercado, cenarios preco, fechamento
+### 1. MarketStudyDetail — mostrar filtros e portais (pequeno)
+A pagina nao mostra os filtros usados nem os portais selecionados do job. Adicionar card com essas informacoes.
 
-### 3 Layouts Premium
-- **Executivo** (`LayoutExecutivo.tsx`): clean, corporativo, com icones e grids estruturados
-- **Premium** (`LayoutPremium.tsx`): gradientes, tipografia serif, gold accents, visual forte
-- **Impacto Comercial** (`LayoutImpactoComercial.tsx`): uppercase, badges, apelo comercial forte
-- Todos usam branding da imobiliaria (cores, logo)
+### 2. Export PDF — melhorar qualidade (medio)
+O edge function atual gera HTML simples. Precisa melhorar para ter aparencia premium com branding, paginacao, e visual profissional. Nao e possivel usar headless browser no edge function, mas podemos melhorar significativamente o HTML/CSS gerado.
 
-### Editor (`PresentationEditor.tsx`)
-- Sidebar de slides com toggle visibilidade
-- Preview central com SectionRenderer
-- Painel lateral de edicao por tipo de secao
-- Editar textos, ocultar secao, duplicar, salvar como modelo
-- Gerar textos com IA (edge function `generate-presentation-text`)
-- Exportar PDF (edge function `export-pdf`)
-- Link compartilhavel com share_token
-- Modo apresentacao
+### 3. Seed Demo — dados de apresentacao e estudo (medio)
+Falta criar dados demo:
+- 1 apresentacao demo vinculada ao corretor1
+- 12 sections geradas
+- 1 market_analysis_job
+- 5-8 comparaveis ficticios
+- 1 market_report com cenarios calculados
 
-### Modo Apresentacao (`PresentationMode.tsx`)
-- Fullscreen com Fullscreen API
-- Navegacao anterior/proximo + teclado (setas, Space, Escape)
-- Barra de progresso
-- Top bar auto-hide
+### 4. Filtros no MarketStudyDetail (pequeno)
+Adicionar card mostrando filtros (raio, faixa de preco, faixa de area) e portais selecionados a partir do campo `filters` e `selected_portals` do job.
 
-### Compartilhamento (`SharedPresentation.tsx`)
-- Rota publica `/share/:token`
-- Renderiza todas as sections visiveis com branding
+## Arquivos a Modificar/Criar
 
-### Edge Functions
-- `generate-presentation-text`: IA via Lovable AI Gateway (Gemini) com tool calling
-- `export-pdf`: Gera HTML estilizado e salva no storage
+| Arquivo | Acao |
+|---------|------|
+| `src/pages/agent/MarketStudyDetail.tsx` | Adicionar cards de filtros usados e portais selecionados |
+| `supabase/functions/export-pdf/index.ts` | Melhorar HTML com branding premium, paginacao, cores, logo |
+| `supabase/functions/seed-demo/index.ts` | Adicionar seed de 1 apresentacao + sections + estudo + comparaveis + report |
 
-## Nenhuma alteracao necessaria
+## Detalhes Tecnicos
 
-Todos os modulos, layouts, wizard, editor, modo apresentacao e funcoes estao implementados conforme solicitado.
+### MarketStudyDetail — filtros e portais
+- Ler `job.filters` (jsonb) e `job.selected_portals` (jsonb) 
+- Renderizar em card apos resumo do imovel
+- Buscar nomes dos portais de `portal_sources`
+
+### Export PDF — upgrade visual
+- Adicionar logo da imobiliaria no header
+- Usar cores do branding (primary_color, secondary_color)
+- Melhorar tipografia com fontes web-safe (Georgia para headings)
+- Adicionar page breaks entre secoes
+- Footer com branding em cada pagina
+- Manter como HTML (PDF real requer headless browser nao disponivel)
+
+### Seed Demo
+- Criar apresentacao para corretor1@demo.com no tenant demo
+- Gerar as 12 sections com conteudo ficticio realista
+- Criar market_analysis_job com status "completed"
+- Inserir 6 comparaveis ficticios com precos e scores
+- Criar market_report com cenarios calculados
+- Executar via chamada ao edge function seed-demo atualizado
 
