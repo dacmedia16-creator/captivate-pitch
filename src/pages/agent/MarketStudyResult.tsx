@@ -691,16 +691,26 @@ export default function MarketStudyResult() {
                           )}
                         </td>
                         <td className="text-center py-2 pl-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => toggleApproval.mutate({ compId: c.id, approved: !c.is_approved })}
-                          >
-                            {c.is_approved
-                              ? <ThumbsDown className="h-3.5 w-3.5 text-muted-foreground" />
-                              : <ThumbsUp className="h-3.5 w-3.5 text-muted-foreground" />}
-                          </Button>
+                          <div className="flex items-center justify-center gap-0.5">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => toggleApproval.mutate({ compId: c.id, approved: !c.is_approved })}
+                            >
+                              {c.is_approved
+                                ? <ThumbsDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                : <ThumbsUp className="h-3.5 w-3.5 text-muted-foreground" />}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => setDeleteTarget(c.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -711,6 +721,16 @@ export default function MarketStudyResult() {
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Excluir comparável"
+        description="Tem certeza que deseja excluir este comparável? Utilize o botão Recalcular para atualizar os cenários."
+        onConfirm={() => deleteTarget && deleteComparable.mutate(deleteTarget)}
+        confirmLabel="Excluir"
+        destructive
+      />
     </div>
   );
 }
