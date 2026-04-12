@@ -140,7 +140,18 @@ export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">CEP</Label>
-            <Input value={data.cep} onChange={e => update("cep", e.target.value)} placeholder="00000-000" className="h-10" />
+            <div className="relative">
+              <Input
+                value={data.cep}
+                onChange={e => handleCepChange(e.target.value)}
+                placeholder="00000-000"
+                maxLength={9}
+                className="h-10 pr-8"
+              />
+              {cepLoading && (
+                <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
