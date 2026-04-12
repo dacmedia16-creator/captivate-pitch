@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { SectionRenderer, SectionData } from "@/components/layouts/SectionRenderer";
+import { ScaledSlide } from "@/components/layouts/ScaledSlide";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Maximize, Minimize, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -103,13 +104,15 @@ export default function PresentationMode() {
       {/* Content */}
       <div className="flex-1 flex items-center justify-center p-8 overflow-hidden">
         <div className={cn(
-          "w-full max-w-4xl transition-all duration-200",
+          "w-full max-w-5xl transition-all duration-200",
           animating && direction === "next" && "opacity-0 translate-x-4",
           animating && direction === "prev" && "opacity-0 -translate-x-4",
           !animating && "opacity-100 translate-x-0"
         )}>
           {current ? (
-            <SectionRenderer section={current} layout={presentation?.selected_layout || "executivo"} branding={branding || undefined} />
+            <ScaledSlide>
+              <SectionRenderer section={current} layout={presentation?.selected_layout || "executivo"} branding={branding || undefined} />
+            </ScaledSlide>
           ) : (
             <p className="text-center text-muted-foreground">Nenhum slide visível</p>
           )}
