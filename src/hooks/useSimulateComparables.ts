@@ -198,7 +198,7 @@ export function generateSimulatedComparables(
       parking_spots: parking,
       similarity_score: similarity,
       source_name: portal.name,
-      source_url: "",
+      source_url: generateSourceUrl(portal.name),
       is_approved: true,
     });
   }
