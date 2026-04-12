@@ -181,7 +181,7 @@ export function generateSimulatedComparables(
       parking_spots: parking,
       similarity_score: similarity,
       source_name: portal.name,
-      source_url: `https://${portal.name.toLowerCase().replace(/\s/g, '')}.com.br/imovel/${rand(100000, 999999)}`,
+      source_url: "",
       is_approved: true,
     });
   }
