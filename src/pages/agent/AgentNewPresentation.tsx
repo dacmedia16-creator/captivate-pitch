@@ -39,7 +39,7 @@ const emptyLayout: LayoutStyleData = { layout: "executivo", tone: "executivo", m
 
 const emptyMarket: MarketStudyData = {
   selectedPortals: [], searchRadius: "2km", minArea: "", maxArea: "",
-  minPrice: "", maxPrice: "", maxComparables: "10",
+  minPrice: "", maxPrice: "", minComparables: "5", maxComparables: "20",
 };
 
 export default function AgentNewPresentation() {
@@ -129,6 +129,7 @@ export default function AgentNewPresentation() {
               maxArea: marketData.maxArea,
               minPrice: marketData.minPrice,
               maxPrice: marketData.maxPrice,
+              minComparables: marketData.minComparables,
               maxComparables: marketData.maxComparables,
             } as any,
             status: "pending",
@@ -147,6 +148,7 @@ export default function AgentNewPresentation() {
                 maxArea: marketData.maxArea,
                 minPrice: marketData.minPrice,
                 maxPrice: marketData.maxPrice,
+                minComparables: marketData.minComparables,
                 maxComparables: marketData.maxComparables,
               },
             };
