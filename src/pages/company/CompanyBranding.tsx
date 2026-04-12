@@ -35,10 +35,12 @@ export default function CompanyBranding() {
     primary_color: "#1e3a5f", secondary_color: "#c9a84c",
     about_global: "", about_national: "", about_regional: "", regional_numbers: "",
     about_global_image_url: "" as string | null, about_national_image_url: "" as string | null, about_regional_image_url: "" as string | null,
+    objectives: null as any, value_propositions: null as any, global_stats: null as any,
   });
 
   useEffect(() => {
     if (agency) {
+      const a = agency as any;
       setAgencyForm({
         company_name: agency.company_name || "",
         logo_url: agency.logo_url,
@@ -49,9 +51,12 @@ export default function CompanyBranding() {
         about_national: agency.about_national || "",
         about_regional: agency.about_regional || "",
         regional_numbers: agency.regional_numbers || "",
-        about_global_image_url: (agency as any).about_global_image_url || null,
-        about_national_image_url: (agency as any).about_national_image_url || null,
-        about_regional_image_url: (agency as any).about_regional_image_url || null,
+        about_global_image_url: a.about_global_image_url || null,
+        about_national_image_url: a.about_national_image_url || null,
+        about_regional_image_url: a.about_regional_image_url || null,
+        objectives: a.objectives || null,
+        value_propositions: a.value_propositions || null,
+        global_stats: a.global_stats || null,
       });
     }
   }, [agency]);
