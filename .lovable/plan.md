@@ -1,36 +1,50 @@
 
 
-# Sincronizar animação de geração com o processo real
+# Corrigir integração Manus — polling quebrado + timeout mata o fluxo
 
-## Problema
-A tela de geração (`StepGeneration`) usa timers fixos (total ~6.2s) para animar os 4 estágios e depois chama `onAnimationDone()`, que marca como completo e redireciona. Mas o processo real (Manus pode levar até 5 min) continua rodando em background. A animação termina antes da apresentação estar pronta.
+## Diagnóstico
 
-## Solução
-Usar duas flags independentes: "animação terminou" e "geração real terminou". Só marcar como completo e redirecionar quando **ambas** forem true.
+A apresentação "Cannes 5" ficou em rascunho porque:
 
-### Mudanças
+1. **Manus task é criada com sucesso** (`task_id: YuYu3VKUnmvSqJ6nJCHCdJ`)
+2. **Polling retorna 404 "Task not found"** — o endpoint `task.listMessages` não encontra a task
+3. **Após o 404, o polling continua por 3+ minutos** com `agent_status: undefined` até o edge function ser encerrado pelo runtime
+4. **Edge function morre sem retornar resposta** → o cliente recebe erro de rede
+5. **O `catch` no cliente mostra toast de erro e faz `return`** — nunca chega em `generatePresentationSections` → apresentação fica em "draft"
 
-**1. `AgentNewPresentation.tsx`**
-- Adicionar estado `generationDone` (boolean, false)
-- Ao final de `handleGenerate()` (após todas as operações de DB), setar `generationDone = true`
-- Renomear `handleAnimationDone` → lógica que verifica se `generationDone` também é true
-- Passar `generationDone` como prop para `StepGeneration`
+## Solução — 3 correções
 
-**2. `StepGeneration.tsx`**
-- Receber nova prop `generationDone: boolean`
-- Quando os timers terminam mas `generationDone` é false: manter o último estágio com spinner (não chamar `onAnimationDone`)
-- Adicionar um estágio extra "Finalizando..." que fica ativo enquanto espera
-- Usar `useEffect` que monitora `generationDone`: quando vira true E animação já passou, chamar `onAnimationDone()`
-- Se `generationDone` virar true antes dos timers acabarem, acelerar a animação restante
+### 1. Corrigir o polling da API Manus
+O endpoint de polling pode estar errado. A API v2 do Manus provavelmente usa `/task.get` ou outro endpoint para verificar status, não `task.listMessages`. Vamos:
+- Adicionar fallback: tentar primeiro `GET /task.get?task_id=X`, e se falhar tentar `GET /task.listMessages?task_id=X`
+- Se receber 404 no polling, **não continuar em loop** — lançar erro imediatamente após 3 tentativas com 404
 
-### Fluxo corrigido
+### 2. Reduzir timeout do Manus para 60s no edge function
+O edge function tem um timeout do runtime (~60-120s). Com `MAX_POLL_TIME = 300_000` (5 min), o runtime mata a function antes do timeout interno. Reduzir para 55s para garantir que a function retorne uma resposta (com erro) antes de ser encerrada, permitindo o fallback para Firecrawl funcionar.
+
+### 3. Proteger o fluxo do cliente contra falha total
+No `AgentNewPresentation.tsx`, se o Manus E Firecrawl falharem com exceção (não só retorno de erro, mas timeout/network error), o código já faz `useSimulated = true` no `catch`. Mas o `catch` externo (linha 272) faz `return` e nunca gera as sections. Mover o `generatePresentationSections` para fora do try/catch de market analysis, ou garantir que o catch não aborte o fluxo todo.
+
+## Arquivos a modificar
+
+1. **`supabase/functions/analyze-market-manus/index.ts`**
+   - Corrigir `pollManusTask`: abortar após 3 erros 404 consecutivos em vez de continuar polling
+   - Reduzir `MAX_POLL_TIME` para 55000 (55s)
+   - Tentar endpoint alternativo `task.get` antes de `task.listMessages`
+
+2. **`src/pages/agent/AgentNewPresentation.tsx`**
+   - Reestruturar o try/catch para que falha no market analysis NÃO impeça `generatePresentationSections` de rodar
+   - O market analysis inteiro (Manus/Firecrawl/simulado) deve ficar num try/catch próprio que sempre resolve (com simulado no pior caso)
+   - `generatePresentationSections` e as atualizações de seções devem rodar **fora** desse try/catch
+
+## Fluxo corrigido
+
 ```text
-Timer animação:  ████████████████░░░░░░░░░░░  (6s)
-Geração real:    ████████████████████████████████ (30-120s)
-                                              ↑ onAnimationDone só aqui
+1. Criar apresentação e job ✓
+2. Tentar Manus (timeout 55s) → falha? Firecrawl → falha? Simulado
+   ↑ NUNCA lança exceção para fora — sempre retorna dados (mesmo simulados)
+3. generatePresentationSections() — SEMPRE executa
+4. Atualizar seções com dados de mercado
+5. setGenerationDone(true)
 ```
-
-### Arquivos
-1. `src/components/wizard/StepGeneration.tsx` — adicionar prop `generationDone`, lógica de espera
-2. `src/pages/agent/AgentNewPresentation.tsx` — adicionar estado `generationDone`, passar como prop
 
