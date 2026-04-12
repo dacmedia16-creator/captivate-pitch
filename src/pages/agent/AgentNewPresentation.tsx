@@ -109,7 +109,8 @@ export default function AgentNewPresentation() {
         portalSourcesPromise = supabase
           .from("portal_sources")
           .select("id, name")
-          .in("id", marketData.selectedPortals);
+          .in("id", marketData.selectedPortals)
+          .then(res => res);
       }
 
       const [, portalSourcesRes] = await Promise.all([photosPromise, portalSourcesPromise]);
