@@ -22,9 +22,40 @@ interface StepPropertyDataProps {
 }
 
 export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
+  const [cepLoading, setCepLoading] = useState(false);
+
   const update = (field: keyof PropertyData, value: string) => {
     onChange({ ...data, [field]: value });
   };
+
+  const handleCepChange = useCallback(async (rawValue: string) => {
+    const digits = rawValue.replace(/\D/g, "").slice(0, 8);
+    const masked = digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
+    onChange({ ...data, cep: masked });
+
+    if (digits.length === 8) {
+      setCepLoading(true);
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+        const json = await res.json();
+        if (json.erro) {
+          toast.error("CEP não encontrado");
+        } else {
+          onChange({
+            ...data,
+            cep: masked,
+            address: json.logradouro || data.address,
+            neighborhood: json.bairro || data.neighborhood,
+            city: json.localidade || data.city,
+          });
+        }
+      } catch {
+        toast.error("Erro ao buscar CEP");
+      } finally {
+        setCepLoading(false);
+      }
+    }
+  }, [data, onChange]);
 
   const addPhoto = (url: string | null) => {
     if (url) onChange({ ...data, photos: [...data.photos, url] });
