@@ -149,23 +149,20 @@ serve(async (req) => {
       );
     }
 
-    // Limit portals to avoid timeout
-    const limitedPortals = searchablePortals.slice(0, 3);
-    if (searchablePortals.length > 3) {
-      limitations.push(`Limitado a 3 de ${searchablePortals.length} portais para respeitar timeout`);
-    }
+    // Usar todos os portais configurados — sem limite
+    const limitedPortals = searchablePortals;
 
     const maxResults = Math.min(Number(filters.maxComparables) || 15, 20);
     const resultsPerPortal = Math.min(Math.ceil(maxResults / limitedPortals.length), 8);
 
     // ==========================================
-    // FASE 1: Busca ampla por portal (Firecrawl Search)
+    // FASE 1: Busca ampla por portal (Firecrawl Search) — em paralelo
     // ==========================================
-    console.log(`[FASE 1] Buscando em ${limitedPortals.length} portais...`);
+    console.log(`[FASE 1] Buscando em ${limitedPortals.length} portais em paralelo...`);
     
     const allUrls: Array<{ url: string; title: string; portal: PortalInfo; snippet: string }> = [];
 
-    for (const portal of limitedPortals) {
+    const portalSearchResults = await Promise.allSettled(limitedPortals.map(async (portal) => {
       const query = buildSearchQuery(property, portal, filters);
       console.log(`[FASE 1] ${portal.name}: "${query}"`);
 
