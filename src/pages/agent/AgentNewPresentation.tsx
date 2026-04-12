@@ -24,9 +24,14 @@ const STEPS = [
 
 const emptyProperty: PropertyData = {
   title: "", owner_name: "", property_type: "", property_purpose: "",
-  address: "", city: "", neighborhood: "", condominium: "", cep: "",
-  area_total: "", area_built: "", area_land: "", bedrooms: "", suites: "",
-  bathrooms: "", parking_spots: "", property_standard: "", property_age: "",
+  address: "", city: "", neighborhood: "", condominium: "", cep: "", state: "",
+  area_total: "", area_built: "", area_land: "", area_useful: "",
+  bedrooms: "", suites: "", bathrooms: "", parking_spots: "",
+  living_rooms: "", powder_rooms: "",
+  property_standard: "", property_age: "",
+  construction_standard: "", conservation_state: "",
+  differentials: [],
+  condominium_fee: "", iptu: "", pricing_objective: "",
   highlights: "", owner_expected_price: "", notes: "", photos: [],
 };
 

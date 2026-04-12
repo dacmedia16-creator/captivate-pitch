@@ -3,18 +3,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ImageUploader } from "@/components/shared/ImageUploader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { X, Tag, MapPin, Ruler, Star, Camera, Loader2 } from "lucide-react";
+import { X, Tag, MapPin, Ruler, Star, Camera, Loader2, Home, DollarSign, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 export interface PropertyData {
   title: string; owner_name: string; property_type: string; property_purpose: string;
   address: string; city: string; neighborhood: string; condominium: string; cep: string;
-  area_total: string; area_built: string; area_land: string; bedrooms: string; suites: string;
-  bathrooms: string; parking_spots: string; property_standard: string; property_age: string;
+  state: string;
+  area_total: string; area_built: string; area_land: string; area_useful: string;
+  bedrooms: string; suites: string; bathrooms: string; parking_spots: string;
+  living_rooms: string; powder_rooms: string;
+  property_standard: string; property_age: string;
+  construction_standard: string; conservation_state: string;
+  differentials: string[];
+  condominium_fee: string; iptu: string; pricing_objective: string;
   highlights: string; owner_expected_price: string; notes: string; photos: string[];
 }
+
+const DIFFERENTIALS = [
+  "Piscina", "Área Gourmet", "Escritório", "Energia Solar", "Automação",
+  "Planejados", "Vista Privilegiada", "Esquina", "Quintal Amplo", "Varanda",
+  "Elevador", "Mobiliado",
+];
 
 interface StepPropertyDataProps {
   data: PropertyData;
@@ -47,6 +60,7 @@ export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
             address: json.logradouro || data.address,
             neighborhood: json.bairro || data.neighborhood,
             city: json.localidade || data.city,
+            state: json.uf || data.state,
           });
         }
       } catch {
@@ -56,6 +70,13 @@ export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
       }
     }
   }, [data, onChange]);
+
+  const toggleDifferential = (d: string) => {
+    const arr = data.differentials.includes(d)
+      ? data.differentials.filter((x) => x !== d)
+      : [...data.differentials, d];
+    onChange({ ...data, differentials: arr });
+  };
 
   const addPhoto = (url: string | null) => {
     if (url) onChange({ ...data, photos: [...data.photos, url] });
@@ -73,6 +94,7 @@ export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
+      {/* Identificação */}
       <Card className="glass-card card-hover-lift">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
@@ -114,6 +136,7 @@ export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
         </CardContent>
       </Card>
 
+      {/* Localização */}
       <Card className="glass-card card-hover-lift">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
@@ -129,6 +152,10 @@ export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Cidade</Label>
             <Input value={data.city} onChange={e => update("city", e.target.value)} className="h-10" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Estado</Label>
+            <Input value={data.state} onChange={e => update("state", e.target.value)} placeholder="SP" className="h-10" maxLength={2} />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Bairro</Label>
@@ -156,6 +183,7 @@ export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
         </CardContent>
       </Card>
 
+      {/* Características */}
       <Card className="glass-card card-hover-lift">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
@@ -171,6 +199,10 @@ export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Área construída (m²)</Label>
             <Input type="number" value={data.area_built} onChange={e => update("area_built", e.target.value)} className="h-10" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Área útil (m²)</Label>
+            <Input type="number" value={data.area_useful} onChange={e => update("area_useful", e.target.value)} className="h-10" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Área terreno (m²)</Label>
@@ -193,12 +225,42 @@ export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
             <Input type="number" value={data.parking_spots} onChange={e => update("parking_spots", e.target.value)} className="h-10" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Padrão</Label>
-            <Select value={data.property_standard} onValueChange={v => update("property_standard", v)}>
+            <Label className="text-xs text-muted-foreground">Salas</Label>
+            <Input type="number" value={data.living_rooms} onChange={e => update("living_rooms", e.target.value)} className="h-10" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Lavabos</Label>
+            <Input type="number" value={data.powder_rooms} onChange={e => update("powder_rooms", e.target.value)} className="h-10" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Padrão construtivo</Label>
+            <Select value={data.construction_standard} onValueChange={v => update("construction_standard", v)}>
               <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
               <SelectContent>
-                {["Econômico", "Médio", "Alto", "Luxo"].map(t => (
-                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                {[
+                  { value: "simples", label: "Simples" },
+                  { value: "medio", label: "Médio" },
+                  { value: "alto", label: "Alto Padrão" },
+                  { value: "luxo", label: "Luxo" },
+                ].map(t => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Estado de conservação</Label>
+            <Select value={data.conservation_state} onValueChange={v => update("conservation_state", v)}>
+              <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectContent>
+                {[
+                  { value: "ruim", label: "Ruim" },
+                  { value: "regular", label: "Regular" },
+                  { value: "bom", label: "Bom" },
+                  { value: "excelente", label: "Excelente" },
+                  { value: "reformado", label: "Reformado" },
+                ].map(t => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -214,7 +276,42 @@ export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
               </SelectContent>
             </Select>
           </div>
-          <div className="md:col-span-2 space-y-1.5">
+        </CardContent>
+      </Card>
+
+      {/* Diferenciais */}
+      <Card className="glass-card card-hover-lift">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-accent" />
+            <CardTitle className="text-base font-sans font-semibold">Diferenciais</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {DIFFERENTIALS.map((d) => (
+              <label key={d} className="flex items-center gap-2 cursor-pointer">
+                <Checkbox
+                  checked={data.differentials.includes(d)}
+                  onCheckedChange={() => toggleDifferential(d)}
+                />
+                <span className="text-sm">{d}</span>
+              </label>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Valores e Objetivo */}
+      <Card className="glass-card card-hover-lift">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <DollarSign className="h-4 w-4 text-accent" />
+            <CardTitle className="text-base font-sans font-semibold">Valores e Objetivo</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Valor pretendido (R$)</Label>
             <Input
               value={data.owner_expected_price ? formatCurrency(data.owner_expected_price) : ""}
@@ -223,9 +320,44 @@ export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
               className="h-10"
             />
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Valor do condomínio (R$)</Label>
+            <Input
+              value={data.condominium_fee ? formatCurrency(data.condominium_fee) : ""}
+              onChange={e => update("condominium_fee", e.target.value.replace(/\D/g, ""))}
+              placeholder="0"
+              className="h-10"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">IPTU anual (R$)</Label>
+            <Input
+              value={data.iptu ? formatCurrency(data.iptu) : ""}
+              onChange={e => update("iptu", e.target.value.replace(/\D/g, ""))}
+              placeholder="0"
+              className="h-10"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Objetivo da precificação</Label>
+            <Select value={data.pricing_objective} onValueChange={v => update("pricing_objective", v)}>
+              <SelectTrigger className="h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectContent>
+                {[
+                  { value: "venda_rapida", label: "Venda Rápida" },
+                  { value: "melhor_preco", label: "Melhor Preço Possível" },
+                  { value: "captacao", label: "Captação" },
+                  { value: "locacao", label: "Locação" },
+                ].map(t => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
       </Card>
 
+      {/* Detalhes */}
       <Card className="glass-card card-hover-lift">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
@@ -235,7 +367,7 @@ export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Diferenciais do imóvel</Label>
+            <Label className="text-xs text-muted-foreground">Diferenciais do imóvel (texto livre)</Label>
             <Textarea value={data.highlights} onChange={e => update("highlights", e.target.value)} placeholder="Piscina, churrasqueira, vista panorâmica..." rows={3} />
           </div>
           <div className="space-y-1.5">
@@ -245,6 +377,7 @@ export function StepPropertyData({ data, onChange }: StepPropertyDataProps) {
         </CardContent>
       </Card>
 
+      {/* Fotos */}
       <Card className="glass-card card-hover-lift">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
