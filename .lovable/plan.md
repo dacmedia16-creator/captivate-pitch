@@ -1,24 +1,46 @@
 
 
-# Expandir Diferenciais no Wizard de Apresentações
+# Melhorar Qualidade e Quantidade de Resultados por Portal
 
-O array `DIFFERENTIALS` em `src/components/wizard/StepPropertyData.tsx` (linha 26-30) ficou com apenas 12 itens. Precisa ser atualizado para incluir os mesmos 32 itens que já existem em `SubjectPropertyForm.tsx`.
+## Problemas Identificados
 
-## Alteração
+1. **`resultsPerPortal` muito baixo**: Com 5 portais e maxComparables=15, cada portal busca apenas 3 URLs. Muitas são descartadas, sobrando pouquíssimos comparáveis válidos.
 
-**`src/components/wizard/StepPropertyData.tsx`** (linhas 26-30) — substituir o array:
+2. **Nome do condomínio na query**: `"Cannes"` entre aspas restringe demais — Google só retorna resultados que mencionam exatamente "Cannes", ignorando apartamentos similares na mesma região.
 
+3. **OLX misturando aluguel/venda**: O `site:olx.com.br/imoveis` não filtra por tipo de transação. Precisa usar paths específicos (`site:olx.com.br/imoveis/venda` ou `site:olx.com.br/imoveis/aluguel`).
+
+## Alterações
+
+### `supabase/functions/analyze-market-deep/index.ts`
+
+**Linha 156 — Aumentar `resultsPerPortal`:**
 ```typescript
-const DIFFERENTIALS = [
-  "Piscina", "Área Gourmet", "Escritório", "Energia Solar", "Automação",
-  "Planejados", "Vista Privilegiada", "Esquina", "Quintal Amplo", "Varanda",
-  "Elevador", "Mobiliado", "Quadra", "Churrasqueira", "Sauna", "Academia",
-  "Salão de Festas", "Playground", "Brinquedoteca", "Portaria 24h",
-  "Jardim", "Lavabo", "Despensa", "Closet", "Aquecimento Central",
-  "Ar Condicionado", "Lareira", "Depósito", "Coworking", "Pet Place",
-  "Bicicletário", "Spa",
-];
+// Antes: Math.min(Math.ceil(maxResults / limitedPortals.length), 8)
+// Depois: mínimo 5 por portal, máximo 10
+const resultsPerPortal = Math.max(5, Math.min(Math.ceil((maxResults * 2) / limitedPortals.length), 10));
+```
+Isso garante pelo menos 5 URLs por portal (25 total com 5 portais), compensando a taxa de descarte.
+
+**Linhas 67-81 — Melhorar `buildSearchQuery`:**
+- Remover nome do condomínio da query (muito restritivo). O condomínio será usado apenas na fase de ranking/similaridade, não na busca.
+- Corrigir OLX: usar `site:olx.com.br/imoveis/venda` ou `site:olx.com.br/imoveis/aluguel` conforme o `property_purpose`.
+- Remover metragem exata da query (ex: "98m²") — isso elimina resultados de 95m² ou 102m² que seriam perfeitamente válidos.
+
+Query resultante (exemplo para ZAP):
+```
+Apartamento 3 quartos Parque Campolim Sorocaba venda site:zapimoveis.com.br
 ```
 
-Verificar também se o grid de checkboxes usa `md:grid-cols-5` (ou ajustar se necessário).
+**Ajustar PORTAL_SITE_MAP para OLX** (linhas ~30-40):
+```typescript
+// Dinâmico baseado no purpose
+const olxPath = purpose === "aluguel" ? "aluguel" : "venda";
+// site:olx.com.br/imoveis/venda
+```
+
+## Resultado Esperado
+- ~25-50 URLs coletadas (vs 12 atual)
+- Queries mais amplas trazem mais comparáveis relevantes
+- OLX retorna apenas venda quando o imóvel é para venda
 
