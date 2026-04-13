@@ -1,25 +1,50 @@
 
 
-# Adicionar URL do Portal Kenlo
+# Fix: "Finalizando..." Stuck Forever
 
-## Problema
-O dicionário `PORTAL_URLS` em `analyze-market-manus/index.ts` não tem entrada para o Kenlo, então quando o Manus tenta resolver o portal, não encontra a URL correta.
+## Root Cause
+Race condition in `StepGeneration.tsx`. The animation's `setTimeout` closure captures a stale `generationDone=false`. When the animation finishes, it doesn't see the updated value. Setting `animationDone.current=true` (a ref) doesn't trigger re-render, so the second useEffect never re-fires.
 
-## Alteração
+## Fix in `src/components/wizard/StepGeneration.tsx`
 
-**`supabase/functions/analyze-market-manus/index.ts`** — linha 43, adicionar entrada `kenlo`:
+Use a ref to mirror `generationDone` so the timer closure always reads the latest value:
 
 ```typescript
-const PORTAL_URLS: Record<string, string> = {
-  zap: "https://www.zapimoveis.com.br",
-  vivareal: "https://www.vivareal.com.br",
-  olx: "https://www.olx.com.br/imoveis",
-  imovelweb: "https://www.imovelweb.com.br",
-  chaves_na_mao: "https://www.chavesnamao.com.br",
-  quintoandar: "https://www.quintoandar.com.br",
-  kenlo: "https://portal.kenlo.com.br/",
-};
+const generationDoneRef = useRef(false);
+
+// Keep ref in sync
+useEffect(() => {
+  generationDoneRef.current = generationDone;
+}, [generationDone]);
 ```
 
-Uma linha adicionada, nenhum outro arquivo precisa de alteração (os outros já usam `portal.kenlo.com.br`).
+Then in the animation's advance function (line 41), check `generationDoneRef.current` instead of `generationDone`:
+
+```typescript
+if (generationDoneRef.current) {
+  setProgress(100);
+  onAnimationDone();
+} else {
+  setCurrentStage(4); // "Finalizando..."
+}
+```
+
+Also add a force-update mechanism in the second useEffect: when `generationDone` becomes true but animation is already done, immediately complete:
+
+```typescript
+useEffect(() => {
+  if (generationDone && animationDone.current && !isComplete) {
+    setCurrentStage(4);
+    setProgress(100);
+    onAnimationDone();
+  }
+}, [generationDone]); // remove isComplete and onAnimationDone from deps to avoid stale issues
+```
+
+## Files Changed
+- `src/components/wizard/StepGeneration.tsx` — add `generationDoneRef`, fix stale closure
+
+## Result
+- Animation completes → checks ref → sees generation is done → immediately redirects
+- No more stuck "Finalizando..." screen
 
