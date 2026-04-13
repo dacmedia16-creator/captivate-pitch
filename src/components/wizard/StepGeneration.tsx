@@ -21,6 +21,12 @@ export function StepGeneration({ isGenerating, isComplete, generationDone, onAni
   const [currentStage, setCurrentStage] = useState(-1);
   const [progress, setProgress] = useState(0);
   const animationDone = useRef(false);
+  const generationDoneRef = useRef(false);
+
+  // Keep ref in sync with prop
+  useEffect(() => {
+    generationDoneRef.current = generationDone;
+  }, [generationDone]);
 
   // Animate through first 4 stages on fixed timers
   useEffect(() => {
@@ -35,10 +41,10 @@ export function StepGeneration({ isGenerating, isComplete, generationDone, onAni
         setProgress(Math.round((stageIndex / 4) * 90));
         setTimeout(advance, stages[stageIndex].duration);
       } else {
-        // Animation done, show waiting stage if generation not done
+        // Animation done, check ref for latest generation status
         setProgress(90);
         animationDone.current = true;
-        if (generationDone) {
+        if (generationDoneRef.current) {
           setProgress(100);
           onAnimationDone();
         } else {
@@ -57,7 +63,8 @@ export function StepGeneration({ isGenerating, isComplete, generationDone, onAni
       setProgress(100);
       onAnimationDone();
     }
-  }, [generationDone, isComplete, onAnimationDone]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generationDone]);
 
   const visibleStages = currentStage < 4 && !generationDone ? stages.slice(0, 4) : stages;
 
