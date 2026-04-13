@@ -1,32 +1,24 @@
 
 
-# Remover Limite de Portais na Edge Function
+# Expandir Diferenciais no Wizard de Apresentações
 
-## Problema
-A edge function `analyze-market-deep` tem um `slice(0, 3)` fixo que limita a busca a apenas 3 portais, ignorando Imóvel Web e Kenlo.
+O array `DIFFERENTIALS` em `src/components/wizard/StepPropertyData.tsx` (linha 26-30) ficou com apenas 12 itens. Precisa ser atualizado para incluir os mesmos 32 itens que já existem em `SubjectPropertyForm.tsx`.
 
 ## Alteração
 
-**`supabase/functions/analyze-market-deep/index.ts`** (linhas 152-156):
-
-Remover o `slice(0, 3)` e usar todos os portais configurados. Ajustar `resultsPerPortal` proporcionalmente para não estourar créditos do Firecrawl.
+**`src/components/wizard/StepPropertyData.tsx`** (linhas 26-30) — substituir o array:
 
 ```typescript
-// Antes:
-const limitedPortals = searchablePortals.slice(0, 3);
-if (searchablePortals.length > 3) {
-  limitations.push(`Limitado a 3 de ${searchablePortals.length} portais`);
-}
-
-// Depois:
-const limitedPortals = searchablePortals; // Sem limite de portais
+const DIFFERENTIALS = [
+  "Piscina", "Área Gourmet", "Escritório", "Energia Solar", "Automação",
+  "Planejados", "Vista Privilegiada", "Esquina", "Quintal Amplo", "Varanda",
+  "Elevador", "Mobiliado", "Quadra", "Churrasqueira", "Sauna", "Academia",
+  "Salão de Festas", "Playground", "Brinquedoteca", "Portaria 24h",
+  "Jardim", "Lavabo", "Despensa", "Closet", "Aquecimento Central",
+  "Ar Condicionado", "Lareira", "Depósito", "Coworking", "Pet Place",
+  "Bicicletário", "Spa",
+];
 ```
 
-Paralelizar as buscas da FASE 1 com `Promise.allSettled` ao invés do `for...of` sequencial (linha 168), para que mais portais não multipliquem o tempo de execução.
-
-## Arquivo afetado
-
-| Arquivo | Ação |
-|---------|------|
-| `supabase/functions/analyze-market-deep/index.ts` | Remover slice, paralelizar buscas |
+Verificar também se o grid de checkboxes usa `md:grid-cols-5` (ou ajustar se necessário).
 
