@@ -234,15 +234,147 @@ serve(async (req) => {
     const resultsPerPortal = Math.max(5, Math.min(Math.ceil((maxResults * 2) / limitedPortals.length), 10));
 
     // ==========================================
-    // FASE 1: Busca ampla por portal (Firecrawl Search) — em paralelo
+    // FASE 1A: Scrape direto das páginas de busca nativa dos portais
     // ==========================================
-    console.log(`[FASE 1] Buscando em ${limitedPortals.length} portais em paralelo...`);
+    console.log(`[FASE 1A] Scraping nativo em ${limitedPortals.length} portais...`);
+
+    const nativeUrls: Array<{ url: string; title: string; portal: PortalInfo; snippet: string }> = [];
+
+    const nativeScrapeResults = await Promise.allSettled(limitedPortals.map(async (portal) => {
+      const nativeUrl = buildPortalNativeUrl(property, portal);
+      if (!nativeUrl) {
+        console.log(`[FASE 1A] ${portal.name}: sem URL nativa (dados insuficientes)`);
+        return { urls: [] as any[], limitation: null as string | null };
+      }
+
+      console.log(`[FASE 1A] ${portal.name}: ${nativeUrl}`);
+
+      try {
+        const scrapeRes = await fetch("https://api.firecrawl.dev/v1/scrape", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            url: nativeUrl,
+            formats: ["markdown", "links"],
+            onlyMainContent: true,
+            waitFor: 5000,
+          }),
+        });
+
+        if (!scrapeRes.ok) {
+          const errStatus = scrapeRes.status;
+          await scrapeRes.text();
+          console.warn(`[FASE 1A] ${portal.name}: scrape failed (${errStatus})`);
+          return { urls: [] as any[], limitation: `${portal.name}: scrape nativo falhou (${errStatus})` };
+        }
+
+        const scrapeData = await scrapeRes.json();
+        const links: string[] = scrapeData.data?.links || scrapeData.links || [];
+        const markdown: string = scrapeData.data?.markdown || scrapeData.markdown || "";
+
+        // Filter links that look like individual property listings
+        const listingPatterns: Record<string, RegExp> = {
+          zap: /zapimoveis\.com\.br\/imovel\//,
+          vivareal: /vivareal\.com\.br\/imovel\//,
+          kenlo: /portal\.kenlo\.com\.br\/imovel\//,
+          olx: /olx\.com\.br\/.*\/imoveis\//,
+          imovelweb: /imovelweb\.com\.br\/propriedades\//,
+        };
+
+        const pattern = listingPatterns[portal.code];
+        const listingUrls = pattern ? links.filter(l => pattern.test(l)) : [];
+
+        console.log(`[FASE 1A] ${portal.name}: ${links.length} links total, ${listingUrls.length} parecem anúncios individuais`);
+
+        if (listingUrls.length > 0) {
+          const dedupedUrls = [...new Set(listingUrls)].slice(0, 20);
+          return {
+            urls: dedupedUrls.map(url => ({ url, title: "", portal, snippet: "native-scrape" })),
+            limitation: null,
+          };
+        }
+
+        // Fallback: use AI to extract URLs from markdown
+        if (markdown.length > 200) {
+          console.log(`[FASE 1A] ${portal.name}: usando markdown (${markdown.length} chars) para extrair URLs via IA...`);
+          try {
+            const extractRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "google/gemini-2.5-flash",
+                messages: [
+                  { role: "system", content: `Extraia todas as URLs de anúncios individuais de imóveis desta página de resultados do portal ${portal.name}. Retorne APENAS URLs que apontam para páginas de anúncios individuais (não páginas de busca/listagem). Se não encontrar URLs individuais, retorne array vazio.` },
+                  { role: "user", content: markdown.substring(0, 8000) },
+                ],
+                tools: [{
+                  type: "function",
+                  function: {
+                    name: "extract_urls",
+                    description: "Extrair URLs de anúncios individuais",
+                    parameters: {
+                      type: "object",
+                      properties: { urls: { type: "array", items: { type: "string" } } },
+                      required: ["urls"],
+                    },
+                  },
+                }],
+                tool_choice: { type: "function", function: { name: "extract_urls" } },
+              }),
+            });
+
+            if (extractRes.ok) {
+              const extractData = await extractRes.json();
+              const tc = extractData.choices?.[0]?.message?.tool_calls?.[0];
+              if (tc) {
+                const parsed = JSON.parse(tc.function.arguments);
+                const extractedUrls: string[] = parsed.urls || [];
+                console.log(`[FASE 1A] ${portal.name}: IA extraiu ${extractedUrls.length} URLs do markdown`);
+                const dedupedUrls = [...new Set(extractedUrls)].slice(0, 20);
+                return {
+                  urls: dedupedUrls.map(url => ({ url, title: "", portal, snippet: "native-ai-extract" })),
+                  limitation: null,
+                };
+              }
+            }
+          } catch (aiErr) {
+            console.warn(`[FASE 1A] ${portal.name}: AI extraction failed`, aiErr);
+          }
+        }
+
+        return { urls: [] as any[], limitation: `${portal.name}: nenhum anúncio individual no scrape nativo` };
+      } catch (err) {
+        console.error(`[FASE 1A] ${portal.name} exception:`, err);
+        return { urls: [] as any[], limitation: `${portal.name}: erro no scrape nativo` };
+      }
+    }));
+
+    for (const result of nativeScrapeResults) {
+      if (result.status === "fulfilled") {
+        const { urls, limitation } = result.value;
+        nativeUrls.push(...urls);
+        if (limitation) limitations.push(limitation);
+      }
+    }
+
+    console.log(`[FASE 1A] Total: ${nativeUrls.length} URLs de scrape nativo`);
+
+    // ==========================================
+    // FASE 1B: Busca via Google (Firecrawl Search) — em paralelo
+    // ==========================================
+    console.log(`[FASE 1B] Buscando em ${limitedPortals.length} portais via Google...`);
     
-    const allUrls: Array<{ url: string; title: string; portal: PortalInfo; snippet: string }> = [];
+    const googleUrls: Array<{ url: string; title: string; portal: PortalInfo; snippet: string }> = [];
 
     const portalSearchResults = await Promise.allSettled(limitedPortals.map(async (portal) => {
       const query = buildSearchQuery(property, portal, filters);
-      console.log(`[FASE 1] ${portal.name}: "${query}"`);
+      console.log(`[FASE 1B] ${portal.name}: "${query}"`);
 
       const portalResult: PortalResult = {
         portal_name: portal.name,
@@ -268,18 +400,18 @@ serve(async (req) => {
         });
 
         if (!searchRes.ok) {
-          const errText = await searchRes.text();
-          console.error(`[FASE 1] ${portal.name} error: ${searchRes.status}`);
+          await searchRes.text();
+          console.error(`[FASE 1B] ${portal.name} error: ${searchRes.status}`);
           const limitation = searchRes.status === 402
             ? `Firecrawl: créditos insuficientes`
-            : `${portal.name}: erro na busca (${searchRes.status})`;
+            : `${portal.name}: erro na busca Google (${searchRes.status})`;
           return { portalResult, urls: [] as any[], limitation };
         }
 
         const searchData = await searchRes.json();
         const results = searchData.data || [];
         portalResult.urls_found = results.length;
-        console.log(`[FASE 1] ${portal.name}: ${results.length} URLs encontradas`);
+        console.log(`[FASE 1B] ${portal.name}: ${results.length} URLs do Google`);
 
         const urls = results.filter((r: any) => r.url).map((r: any) => ({
           url: r.url,
@@ -289,8 +421,8 @@ serve(async (req) => {
         }));
         return { portalResult, urls, limitation: null as string | null };
       } catch (err) {
-        console.error(`[FASE 1] ${portal.name} exception:`, err);
-        return { portalResult, urls: [] as any[], limitation: `${portal.name}: falha na conexão` };
+        console.error(`[FASE 1B] ${portal.name} exception:`, err);
+        return { portalResult, urls: [] as any[], limitation: `${portal.name}: falha na conexão Google` };
       }
     }));
 
@@ -298,14 +430,31 @@ serve(async (req) => {
       if (result.status === "fulfilled") {
         const { portalResult, urls, limitation } = result.value;
         portalResults.push(portalResult);
-        allUrls.push(...urls);
+        googleUrls.push(...urls);
         if (limitation) limitations.push(limitation);
       }
     }
 
-    console.log(`[FASE 1] Total: ${allUrls.length} URLs coletadas`);
+    // Merge native + Google URLs, deduplicating by URL
+    const seenUrls = new Set<string>();
+    const mergedUrls: Array<{ url: string; title: string; portal: PortalInfo; snippet: string }> = [];
+    for (const item of [...nativeUrls, ...googleUrls]) {
+      const normalized = item.url.replace(/\/$/, "").toLowerCase();
+      if (!seenUrls.has(normalized)) {
+        seenUrls.add(normalized);
+        mergedUrls.push(item);
+      }
+    }
 
-    if (allUrls.length === 0) {
+    console.log(`[FASE 1] Total merged: ${mergedUrls.length} URLs únicas (${nativeUrls.length} nativo + ${googleUrls.length} Google)`);
+
+    // Update portal results with native counts
+    for (const pr of portalResults) {
+      const nativeCount = nativeUrls.filter(u => u.portal.code === pr.portal_code).length;
+      pr.urls_found += nativeCount;
+    }
+
+    if (mergedUrls.length === 0) {
       return new Response(
         JSON.stringify({
           success: true,
@@ -329,14 +478,13 @@ serve(async (req) => {
     // ==========================================
     // FASE 2: Validação individual (Firecrawl Scrape + AI extraction)
     // ==========================================
-    console.log(`[FASE 2] Abrindo ${allUrls.length} URLs individualmente...`);
+    console.log(`[FASE 2] Abrindo ${mergedUrls.length} URLs individualmente...`);
 
-    // Limit URLs to avoid timeout (each scrape ~2-3s)
-    const maxUrlsToScrape = Math.min(allUrls.length, 15);
-    if (allUrls.length > maxUrlsToScrape) {
-      limitations.push(`Limitado a ${maxUrlsToScrape} de ${allUrls.length} URLs para respeitar timeout`);
+    const maxUrlsToScrape = Math.min(mergedUrls.length, 25);
+    if (mergedUrls.length > maxUrlsToScrape) {
+      limitations.push(`Limitado a ${maxUrlsToScrape} de ${mergedUrls.length} URLs para respeitar timeout`);
     }
-    const urlsToProcess = allUrls.slice(0, maxUrlsToScrape);
+    const urlsToProcess = mergedUrls.slice(0, maxUrlsToScrape);
 
     const scrapedPages: Array<{
       url: string;
