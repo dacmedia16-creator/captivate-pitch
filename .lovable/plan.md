@@ -1,53 +1,81 @@
 
 
-# Fix: Presentation Generation Screen Getting Stuck
+# Integrar Manus como Busca Principal com Firecrawl como Fallback
 
-## Problem
-In `AgentNewPresentation.tsx`, the `handleGenerate` function runs the market analysis (deep scraping, comparables processing, AI summary) **sequentially before** setting `generationDone(true)`. The loading animation finishes in ~6 seconds, but the market analysis can take 2+ minutes, leaving the user stuck on "Finalizando..." indefinitely.
+## Situação Atual
+- `AgentNewPresentation.tsx` chama `analyze-market-deep` (Firecrawl nativo + Google) como principal
+- Se falhar, cai para `analyze-market` (Firecrawl básico)
+- `analyze-market-manus` existe mas **não é chamado** de lugar nenhum no frontend
 
-## Root Cause
-Line 478 (`setGenerationDone(true)`) only executes after ALL market analysis completes — deep scraping, saving comparables, calculating adjustments, generating AI summary, etc.
+## Problema do Manus
+O Manus navega portais como um humano (ideal para SPAs como Kenlo), mas o edge function tem timeout de 55s para polling. Tarefas Manus costumam levar mais que isso. Precisamos de uma estratégia que aproveite o Manus sem travar.
 
-## Solution
-Restructure `handleGenerate` so that:
-1. **Presentation creation + sections** run first (fast, ~2-3 seconds)
-2. `setGenerationDone(true)` fires immediately after sections are generated
-3. **Market analysis** runs in the background (fire-and-forget) — results are saved to DB but don't block the UI redirect
+## Solução: Cascata Manus → Firecrawl Deep → Firecrawl Básico
 
-### Changes in `src/pages/agent/AgentNewPresentation.tsx`
+### Alteração em `src/pages/agent/AgentNewPresentation.tsx` (linhas 178-207)
 
-Move the market analysis block to run as a **non-blocking background task** after `setGenerationDone(true)`:
+Nova ordem de tentativas no `runMarketAnalysisBackground`:
 
 ```text
-Current flow:
-  1. Create presentation record
-  2. Upload photos
-  3. Run market analysis (2+ minutes)     ← BLOCKS
-  4. Generate presentation sections
-  5. Update pricing sections
-  6. setGenerationDone(true)              ← TOO LATE
+1. Tentar analyze-market-manus (55s timeout)
+   → Se retornar comparáveis: usar esses resultados ✓
+   → Se timeout ou falhar: ir para passo 2
 
-New flow:
-  1. Create presentation record
-  2. Upload photos (parallel)
-  3. Generate presentation sections
-  4. setGenerationDone(true)              ← IMMEDIATE
-  5. Market analysis runs async (fire-and-forget)
-     - Deep scrape portals
-     - Save comparables
-     - Calculate adjustments
-     - Generate AI summary
-     - Update pricing_scenarios section in DB
+2. Tentar analyze-market-deep (Firecrawl nativo + Google)
+   → Se retornar comparáveis: usar esses resultados ✓
+   → Se falhar: ir para passo 3
+
+3. Tentar analyze-market (Firecrawl básico)
+   → Último recurso
 ```
 
-The market analysis results will still be saved to the database. When the user opens the editor, the sections will already have the market data if the background task finished, or will show placeholder data that can be refreshed.
+### Código da cascata
 
-### Additional fix in `StepGeneration.tsx`
-- Wrap `onAnimationDone` callback dependency properly to avoid stale closure issues
-- The current code works but `onAnimationDone` is not memoized in the parent — add `useCallback` in `AgentNewPresentation` for `handleAnimationDone`
+Substituir o bloco try/catch (linhas 181-207) por:
 
-## Result
-- Loading screen completes in ~6-8 seconds (animation + section generation)
-- Market analysis continues in background without blocking the user
-- No more "stuck" loading screens
+```typescript
+// 1. Try Manus (navigates portals like a human — best for SPAs)
+try {
+  console.log("Trying analyze-market-manus (browser navigation)...");
+  const { data: manusResult, error: manusError } = await supabase.functions.invoke("analyze-market-manus", { body: analyzeBody });
+  
+  if (!manusError && manusResult?.success && manusResult?.comparables?.length) {
+    console.log(`Manus returned ${manusResult.comparables.length} comparables`);
+    scrapedComparables = manusResult.comparables;
+    toast.success(`Manus encontrou ${manusResult.comparables.length} comparáveis`);
+  } else {
+    throw new Error(manusError?.message || manusResult?.message || "Manus returned no results");
+  }
+} catch (manusErr) {
+  console.warn("Manus failed, falling back to Firecrawl deep...", manusErr);
+  
+  // 2. Firecrawl Deep (native portal scrape + Google)
+  try {
+    const { data: deepResult, error: deepError } = await supabase.functions.invoke("analyze-market-deep", { body: analyzeBody });
+    if (!deepError && deepResult?.success && deepResult?.comparables?.length) {
+      scrapedComparables = deepResult.comparables;
+      researchMetadata = deepResult.research_metadata || null;
+    } else {
+      throw new Error("deep failed");
+    }
+  } catch {
+    // 3. Basic Firecrawl fallback
+    const { data: basicResult } = await supabase.functions.invoke("analyze-market", { body: analyzeBody });
+    if (basicResult?.success && basicResult?.comparables?.length) {
+      scrapedComparables = basicResult.comparables;
+    } else {
+      toast.warning("Não foi possível buscar comparáveis nos portais.");
+    }
+  }
+}
+```
+
+### Nenhuma alteração no edge function `analyze-market-manus`
+A função já está pronta — aceita o mesmo formato `{ property, portals, filters }` e retorna `{ success, comparables }`.
+
+## Resultado
+- Manus tenta primeiro (55s) — melhor para portais SPA como Kenlo
+- Se Manus não completar a tempo, Firecrawl Deep assume
+- Se Firecrawl Deep falhar, Firecrawl básico é o último recurso
+- Tudo roda em background (não trava a UI)
 
