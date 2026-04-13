@@ -178,32 +178,56 @@ export default function AgentNewPresentation() {
     let scrapedComparables: any[] = [];
     let researchMetadata: any = null;
 
+    // Cascata: Manus → Firecrawl Deep → Firecrawl Básico
     try {
-      console.log("Trying analyze-market-deep (3-phase methodology)...");
-      const { data: deepResult, error: deepError } = await supabase.functions.invoke("analyze-market-deep", { body: analyzeBody });
+      // 1. Try Manus first (navigates portals like a human — best for SPAs like Kenlo)
+      console.log("Trying analyze-market-manus (browser navigation)...");
+      const { data: manusResult, error: manusError } = await supabase.functions.invoke("analyze-market-manus", { body: analyzeBody });
 
-      if (!deepError && deepResult?.success && deepResult?.comparables?.length) {
-        console.log(`Deep analysis returned ${deepResult.comparables.length} comparables`);
-        scrapedComparables = deepResult.comparables;
-        researchMetadata = deepResult.research_metadata || null;
-        const meta = deepResult.research_metadata;
-        if (meta) {
-          toast.success(`${meta.total_listings_found} anúncios encontrados, ${meta.listings_opened} validados, ${deepResult.comparables.length} selecionados`);
-        }
+      if (!manusError && manusResult?.success && manusResult?.comparables?.length) {
+        console.log(`Manus returned ${manusResult.comparables.length} comparables`);
+        scrapedComparables = manusResult.comparables;
+        toast.success(`Manus encontrou ${manusResult.comparables.length} comparáveis navegando nos portais`);
       } else {
-        console.warn("Deep analysis failed, trying Firecrawl fallback...", deepError || deepResult?.message);
-        const { data: analyzeResult, error: analyzeError } = await supabase.functions.invoke("analyze-market", { body: analyzeBody });
-        if (!analyzeError && analyzeResult?.success && analyzeResult?.comparables?.length) {
-          console.log(`Firecrawl fallback returned ${analyzeResult.comparables.length} comparables`);
-          scrapedComparables = analyzeResult.comparables;
+        throw new Error(manusError?.message || manusResult?.message || "Manus returned no results");
+      }
+    } catch (manusErr) {
+      console.warn("Manus failed, falling back to Firecrawl deep...", manusErr);
+
+      // 2. Firecrawl Deep (native portal scrape + Google)
+      try {
+        console.log("Trying analyze-market-deep (3-phase methodology)...");
+        const { data: deepResult, error: deepError } = await supabase.functions.invoke("analyze-market-deep", { body: analyzeBody });
+
+        if (!deepError && deepResult?.success && deepResult?.comparables?.length) {
+          console.log(`Deep analysis returned ${deepResult.comparables.length} comparables`);
+          scrapedComparables = deepResult.comparables;
+          researchMetadata = deepResult.research_metadata || null;
+          const meta = deepResult.research_metadata;
+          if (meta) {
+            toast.success(`${meta.total_listings_found} anúncios encontrados, ${meta.listings_opened} validados, ${deepResult.comparables.length} selecionados`);
+          }
         } else {
-          console.warn("Firecrawl also failed.", analyzeError || analyzeResult?.message);
-          toast.warning("Não foi possível buscar comparáveis nos portais.");
+          throw new Error(deepError?.message || deepResult?.message || "Deep analysis returned no results");
+        }
+      } catch (deepErr) {
+        console.warn("Firecrawl deep failed, trying basic fallback...", deepErr);
+
+        // 3. Basic Firecrawl fallback (last resort)
+        try {
+          const { data: basicResult, error: basicError } = await supabase.functions.invoke("analyze-market", { body: analyzeBody });
+          if (!basicError && basicResult?.success && basicResult?.comparables?.length) {
+            console.log(`Firecrawl basic returned ${basicResult.comparables.length} comparables`);
+            scrapedComparables = basicResult.comparables;
+          } else {
+            console.warn("All search methods failed.");
+            toast.warning("Não foi possível buscar comparáveis nos portais.");
+          }
+        } catch (basicErr) {
+          console.error("All market analysis methods failed:", basicErr);
+          toast.warning("Erro ao buscar comparáveis nos portais.");
         }
       }
-    } catch (err) {
-      console.error("Market analysis error:", err);
-      toast.warning("Erro ao buscar comparáveis nos portais.");
     }
 
     const generatedComparables = scrapedComparables.map((c: any) => ({ market_analysis_job_id: job.id, ...c }));
