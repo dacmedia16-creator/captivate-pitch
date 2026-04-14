@@ -1061,6 +1061,43 @@ Extraia todos os imóveis relevantes. Descarte apenas se claramente incompatíve
       };
     }
 
+    // === URL Fallback: fix generic search URLs ===
+    const searchUrlPatterns = [
+      /vivareal\.com\.br\/venda\//,
+      /vivareal\.com\.br\/aluguel\//,
+      /vivareal\.com\.br\/condominio\//,
+      /zapimoveis\.com\.br\/venda\//,
+      /zapimoveis\.com\.br\/aluguel\//,
+      /zapimoveis\.com\.br\/condominio\//,
+      /imovelweb\.com\.br\/(apartamentos|casas|imoveis)-/,
+      /olx\.com\.br\/imoveis\//,
+    ];
+    const individualUrlPatterns = [
+      /vivareal\.com\.br\/imovel\//,
+      /zapimoveis\.com\.br\/imovel\//,
+      /imovelweb\.com\.br\/propriedades\//,
+      /olx\.com\.br\/d\/anuncio\//,
+      /kenlo\.com\.br\/imovel\//,
+    ];
+
+    for (const c of (extracted.comparables || [])) {
+      const url = c.source_url || "";
+      const isGenericUrl = searchUrlPatterns.some(p => p.test(url)) && !individualUrlPatterns.some(p => p.test(url));
+      
+      if (isGenericUrl && c.external_id) {
+        const eid = c.external_id.replace(/^id-/, "");
+        const portalName = (c.source_name || "").toLowerCase();
+        if (portalName.includes("viva") || portalName.includes("vivareal")) {
+          c.source_url = `https://www.vivareal.com.br/imovel/${c.external_id}`;
+        } else if (portalName.includes("zap")) {
+          c.source_url = `https://www.zapimoveis.com.br/imovel/${c.external_id}`;
+        } else if (portalName.includes("imóvel web") || portalName.includes("imovelweb") || portalName.includes("imoveweb")) {
+          c.source_url = `https://www.imovelweb.com.br/propriedades/${eid}`;
+        }
+        console.log(`[URL FIX] ${url.substring(0, 60)}... → ${c.source_url}`);
+      }
+    }
+
     // Filter, score, deduplicate
     const baseArea = Number(property.area_total || property.area_built || property.area_land) || 100;
     const baseBedrooms = Number(property.bedrooms) || 3;
