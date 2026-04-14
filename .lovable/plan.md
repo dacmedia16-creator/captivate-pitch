@@ -1,36 +1,89 @@
 
 
-# Plano: Fazer Kenlo funcionar nos resultados
+# Plano: Garantir diversidade de portais na seleção de URLs (Kenlo aparecendo)
 
-## Diagnóstico final
+## Problema
 
-Os logs confirmam que **todas as 4 páginas Kenlo (search e individuais) retornam ~900 chars** de markdown. O `waitFor: 10000` e `actions` de scroll não fazem diferença — o SPA do Kenlo simplesmente não renderiza no Firecrawl. O Google Cache fallback não dispara porque 900 > 500 (threshold atual).
+O Kenlo contribui 8 URLs via Google (0 nativas, pois é SPA), mas os outros 4 portais contribuem 70+ URLs nativas. Na seleção das 25 URLs para scraping, a priorização por relevância (condomínio > cidade) não garante representação de todos os portais. Resultado: **0 URLs do Kenlo são scrapeadas**.
 
-O problema NÃO é de priorização ou filtro — as URLs do Kenlo estão sendo scrapeadas, mas o conteúdo retornado é vazio.
+## Causa raiz
 
-## Solução: abordagem tripla
+Linha 627-631: `mergedUrls.slice(0, 25)` — simples truncamento após sort. URLs de Viva Real, ZAP e OLX dominam pelo volume.
 
-### 1. Migrar Kenlo para Firecrawl v2 (principal)
-O código usa `api.firecrawl.dev/v1/scrape` — v2 tem melhor suporte a JS rendering. Mudar para `api.firecrawl.dev/v2/scrape` especificamente para URLs Kenlo.
+## Solução: Round-robin por portal
 
-### 2. Extrair dados do slug da URL do Kenlo
-URLs individuais do Kenlo têm formato previsível:
-`/imovel/apartamento-sorocaba-3-quartos-104-m/AP2337-A1`
+Em vez de `slice(0, 25)`, implementar seleção round-robin que garante pelo menos N URLs por portal ativo (quando disponíveis), depois preenche o restante por relevância.
 
-Podemos extrair: tipo (apartamento), cidade (sorocaba), quartos (3), área (104m²), ID (AP2337-A1).
+### Lógica
 
-Quando o markdown é insuficiente (<1000 chars) para URLs individuais do Kenlo, criar um "markdown sintético" a partir do slug para que a IA tenha dados mínimos para trabalhar.
+```text
+1. Agrupar URLs por portal
+2. Para cada portal com URLs, selecionar até 3 URLs (round-robin)
+3. Preencher slots restantes (até 25) com URLs não selecionadas, ordenadas por relevância
+```
 
-### 3. Reduzir threshold do Google Cache para 1000 chars
-Mudar de 500 para 1000 chars — assim as páginas Kenlo (922-962 chars) acionam o fallback do Google Cache.
+Com 5 portais: 5 × 3 = 15 slots garantidos, + 10 por relevância = 25 total.
+
+## Mudanças em `supabase/functions/analyze-market-deep/index.ts`
+
+### Substituir linhas 627-631
+
+De:
+```typescript
+const maxUrlsToScrape = Math.min(mergedUrls.length, 25);
+const urlsToProcess = mergedUrls.slice(0, maxUrlsToScrape);
+```
+
+Para:
+```typescript
+// Round-robin: garantir diversidade de portais
+const MAX_URLS = 25;
+const MIN_PER_PORTAL = 3;
+const byPortal = new Map<string, typeof mergedUrls>();
+for (const item of mergedUrls) {
+  const key = item.portal.code;
+  if (!byPortal.has(key)) byPortal.set(key, []);
+  byPortal.get(key)!.push(item);
+}
+
+const selected = new Set<string>();
+const urlsToProcess: typeof mergedUrls = [];
+
+// Round 1: até MIN_PER_PORTAL por portal
+for (const [code, items] of byPortal) {
+  for (const item of items.slice(0, MIN_PER_PORTAL)) {
+    if (urlsToProcess.length >= MAX_URLS) break;
+    urlsToProcess.push(item);
+    selected.add(item.url);
+  }
+}
+
+// Round 2: preencher com restantes por relevância
+for (const item of mergedUrls) {
+  if (urlsToProcess.length >= MAX_URLS) break;
+  if (!selected.has(item.url)) {
+    urlsToProcess.push(item);
+  }
+}
+
+// Log distribuição
+const distLog = [...byPortal.entries()].map(([c, items]) => 
+  `${c}: ${urlsToProcess.filter(u => u.portal.code === c).length}/${items.length}`
+).join(", ");
+console.log(`[FASE 2] Distribuição por portal: ${distLog}`);
+```
+
+## Resultado esperado
+
+- Kenlo: 3 URLs scrapeadas (das 8 do Google)
+- Outros portais: pelo menos 3 cada, restante por relevância
+- Total: 25 URLs com representação de todos os portais ativos
 
 ## Etapas
-
-1. **Reduzir threshold do Google Cache** de 500 para 1000 chars (1 linha)
-2. **Gerar markdown sintético** a partir do slug da URL Kenlo quando o markdown real é insuficiente (~15 linhas)
-3. **Migrar scrape do Kenlo para Firecrawl v2** (`/v2/scrape`) (~2 linhas)
-4. Deploy + verificar logs
+1. Implementar round-robin na seleção de URLs
+2. Adicionar log de distribuição por portal
+3. Deploy + re-testar
 
 ## Arquivo modificado
-`supabase/functions/analyze-market-deep/index.ts`
+`supabase/functions/analyze-market-deep/index.ts` — ~25 linhas alteradas
 
