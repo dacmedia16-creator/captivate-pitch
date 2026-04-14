@@ -217,20 +217,19 @@ export default function AgentNewPresentation() {
       console.warn("Manus failed, trying Firecrawl deep...", manusErr);
       try {
         const { data: deepResult, error: deepError } = await supabase.functions.invoke("analyze-market-deep", { body: analyzeBody });
-        // 202 = background processing started — study will update itself via DB
+        // 202 = background processing — edge function saves comparables directly to DB
         if (!deepError && deepResult?.message === "Processing started in background") {
           console.log("Market analysis running in background for study:", study.id);
           toast.info("Estudo de mercado sendo processado em background...");
-          // Don't wait for comparables — they'll be saved directly by the edge function
-          // The study status will be updated to "completed" or "failed" automatically
+          // Poll for completion
+          pollStudyStatus(study.id, presId, propData);
           return;
         }
+        // Sync mode — edge function already saved to DB if market_study_id was provided
         if (!deepError && deepResult?.success && deepResult?.comparables?.length) {
           scrapedComparables = deepResult.comparables;
           researchMetadata = deepResult.research_metadata || null;
-          if (deepResult.research_metadata) {
-            toast.success(`${deepResult.research_metadata.total_listings_found} anúncios encontrados, ${deepResult.comparables.length} selecionados`);
-          }
+          toast.success(`${deepResult.research_metadata?.total_listings_found || 0} anúncios encontrados, ${deepResult.comparables.length} selecionados`);
         } else {
           throw new Error(deepError?.message || deepResult?.message || "No results");
         }
