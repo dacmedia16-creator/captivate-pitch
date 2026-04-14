@@ -1,45 +1,63 @@
 
 
-# Diagnóstico: Cannes 22 travado em "processing"
+# Plano: Corrigir filtro de cidade e priorização de URLs
 
-## Causa raiz
+## Diagnóstico confirmado (Cannes 23 logs)
 
-O "Cannes 22" está com status `processing` desde 03:04 — nunca terminou. Os logs mostram:
+Os logs mostram que:
+- 103 URLs merged, **0 filtradas por cidade** (o filtro não disparou)
+- Primeiro 25 URLs abertas são TODAS de Rio de Janeiro
+- IA extraiu 25 comparáveis mas **todos 25 descartados** por similaridade 0
 
-1. **FASE 1**: 25 URLs coletadas (15 nativo + 10 Google) — OK
-2. **FASE 2**: 39 páginas válidas de 43 abertas — expandiu condomínio com paginação (15 URLs do Cannes) + scrapeou 25 originais + bairros como multi-listing
-3. **FASE 3**: "Extraindo dados de 39 páginas com IA..." — **último log**. Nada depois.
+O filtro `isWrongCityUrl` tem o pattern `-rio-de-janeiro-` que DEVERIA casar com as URLs do log. Causa provável: o deploy anterior não incluiu o código do filtro, OU as URLs reais (truncadas no log) não contêm o pattern exatamente.
 
-O edge function **morreu por timeout** durante a chamada à IA. 39 páginas × ~4000-12000 chars cada = prompt gigantesco enviado ao Gemini. A chamada de IA sozinha leva 30-60s, mas a função já gastou ~2 minutos só no scraping. Total excede o timeout do edge function (~150s max).
+## Correções (todas em `supabase/functions/analyze-market-deep/index.ts`)
 
-Como a função morre abruptamente, nunca executa o código que atualiza o status para `completed` ou `failed`. Resultado: fica eternamente em `processing`.
+### 1. Trocar filtro negativo por filtro POSITIVO de cidade
+Em vez de listar cidades erradas para bloquear, verificar se a URL contém a cidade-alvo (positivo). Se a URL contém OUTRA cidade conhecida E NÃO contém a cidade-alvo, descartar.
 
-## Problemas secundários confirmados nos logs
+```typescript
+function isWrongCityUrl(url: string, targetCity: string | undefined): boolean {
+  if (!targetCity) return false;
+  const targetSlug = slugify(targetCity);
+  if (!targetSlug) return false;
+  const urlLower = url.toLowerCase();
+  
+  // Se a URL contém a cidade-alvo, é OK
+  if (urlLower.includes(targetSlug)) return false;
+  
+  // Se contém qualquer outra cidade conhecida, é errada
+  const knownCities = [
+    "rio-de-janeiro", "sao-paulo", "belo-horizonte", "curitiba", 
+    "porto-alegre", "salvador", "brasilia", "fortaleza", "recife", 
+    "manaus", "goiania", "campinas", "santos", "guarulhos", "niteroi",
+    "sorocaba", "jundiai", "piracicaba", "bauru", "ribeirao-preto",
+    "uberlandia", "joinville", "florianopolis", "londrina", "maringa",
+  ];
+  
+  for (const city of knownCities) {
+    if (city === targetSlug) continue;
+    if (urlLower.includes(city)) return true;
+  }
+  return false;
+}
+```
 
-- **Google retorna Rio de Janeiro** para busca de Sorocaba (URLs de `/imovel/...rio-de-janeiro...` nos logs)
-- **Bairros genéricos** (não-condomínio) sendo scraped e tratados como multi-listing (desperdiça tempo e créditos)
+### 2. Priorizar URLs por relevância antes do slice(0, 25)
+Ordenar `mergedUrls` antes de pegar os primeiros 25:
+1. URLs que contêm o nome do condomínio (highest priority)
+2. URLs que contêm a cidade-alvo
+3. Resto
 
-## Correções propostas
+### 3. Adicionar log detalhado do filtro
+Logar as primeiras 5 URLs descartadas pelo filtro de cidade para debug.
 
-### 1. Background processing com `EdgeRuntime.waitUntil`
-Retornar `202 Accepted` imediatamente e processar em background. Atualizar status no banco conforme progride. O frontend já faz polling no status.
-
-### 2. Cap de páginas para extração IA
-Limitar a 20 páginas enviadas para a IA. Priorizar: páginas do condomínio-alvo > individuais > multi-listing genérico.
-
-### 3. Pré-filtro de cidade antes da IA
-Descartar URLs que claramente pertencem a outra cidade (ex: `/rio-de-janeiro/` quando a busca é Sorocaba) ANTES de scrapeá-las, economizando tempo e créditos.
-
-### 4. Atualizar status para "failed" em caso de erro
-Wrap principal em try/catch que sempre atualiza o status, mesmo em timeout parcial.
-
-## Arquivo modificado
-`supabase/functions/analyze-market-deep/index.ts`
+### 4. Forçar re-deploy e testar
+Deploy explícito + teste via `curl_edge_functions` com payload do Cannes.
 
 ## Etapas
-1. Implementar `EdgeRuntime.waitUntil` — retornar 202, processar em background
-2. Adicionar filtro de cidade nas URLs da FASE 1/2
-3. Limitar páginas enviadas à IA (max 20, priorizando condomínio)
-4. Garantir try/catch com status update em todo cenário de falha
-5. Deploy e re-testar Cannes 22
+1. Atualizar `isWrongCityUrl` para filtro positivo + lista expandida de cidades
+2. Adicionar sort de prioridade em `mergedUrls` antes do cap de 25
+3. Adicionar logs de debug no filtro
+4. Deploy + teste com payload Cannes Sorocaba
 
