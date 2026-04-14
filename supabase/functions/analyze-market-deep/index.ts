@@ -194,6 +194,41 @@ function extractIndividualListingUrls(links: string[], portalCode: string): stri
   return [...new Set(links.filter(l => pattern.test(l)))];
 }
 
+// Generate pagination URLs from a multi-listing URL
+// e.g. ?pagina=2 → also fetch pagina=1, pagina=3 (up to MAX_PAGES)
+function generatePaginationUrls(url: string, maxPages = 5): string[] {
+  const urls: string[] = [];
+  const paginaMatch = url.match(/([?&])pagina=(\d+)/i);
+  const pageMatch = url.match(/([?&])page=(\d+)/i);
+
+  if (paginaMatch) {
+    const currentPage = parseInt(paginaMatch[2], 10);
+    const startPage = Math.max(1, currentPage - 1);
+    const endPage = Math.min(currentPage + Math.max(2, maxPages - 2), startPage + maxPages - 1);
+    for (let p = startPage; p <= endPage; p++) {
+      urls.push(url.replace(/([?&])pagina=\d+/i, `$1pagina=${p}`));
+    }
+  } else if (pageMatch) {
+    const currentPage = parseInt(pageMatch[2], 10);
+    const startPage = Math.max(1, currentPage - 1);
+    const endPage = Math.min(currentPage + Math.max(2, maxPages - 2), startPage + maxPages - 1);
+    for (let p = startPage; p <= endPage; p++) {
+      urls.push(url.replace(/([?&])page=\d+/i, `$1page=${p}`));
+    }
+  } else if (/\/condominio\//i.test(url) || /\/busca\//i.test(url)) {
+    // No pagination param yet — add pagina=1..maxPages
+    const separator = url.includes("?") ? "&" : "?";
+    for (let p = 1; p <= Math.min(maxPages, 3); p++) {
+      urls.push(`${url}${separator}pagina=${p}`);
+    }
+  }
+
+  // Deduplicate and exclude the original URL
+  const normalized = url.replace(/\/$/, "").toLowerCase();
+  return [...new Set(urls)]
+    .filter(u => u.replace(/\/$/, "").toLowerCase() !== normalized);
+}
+
 // Deduplicate by address+area+price similarity
 function isDuplicate(
   comp: any,
@@ -604,24 +639,87 @@ serve(async (req) => {
 
         // Multi-listing handling: try to expand into individual URLs
         if (isMultiListing || looksLikeMultiListing(markdown)) {
-          const individualUrls = extractIndividualListingUrls(links, item.portal.code);
+          // Collect individual URLs from this page
+          let allIndividualUrls = extractIndividualListingUrls(links, item.portal.code);
           
-          if (individualUrls.length > 0) {
-            // Found individual listing URLs — add them to the queue for individual scraping
-            const MAX_EXPANDED = 15;
-            const newUrls = individualUrls
+          // Auto-pagination: scrape adjacent pages to find more listings
+          const paginationUrls = generatePaginationUrls(item.url, 4);
+          if (paginationUrls.length > 0) {
+            console.log(`[FASE 2] Paginação automática: ${paginationUrls.length} páginas adjacentes para ${item.url.substring(0, 60)}...`);
+            
+            const paginationResults = await Promise.allSettled(paginationUrls.map(async (pageUrl) => {
+              const normalizedPage = pageUrl.replace(/\/$/, "").toLowerCase();
+              if (scrapedUrlSet.has(normalizedPage)) return [];
+              scrapedUrlSet.add(normalizedPage);
+              
+              try {
+                listingsOpened++;
+                const pageRes = await fetch("https://api.firecrawl.dev/v1/scrape", {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    url: pageUrl,
+                    formats: ["markdown", "links"],
+                    onlyMainContent: true,
+                    waitFor: 5000,
+                  }),
+                });
+
+                if (!pageRes.ok) {
+                  await pageRes.text();
+                  return [];
+                }
+
+                const pageData = await pageRes.json();
+                const pageLinks: string[] = pageData.data?.links || pageData.links || [];
+                const pageMd: string = pageData.data?.markdown || pageData.markdown || "";
+                
+                const pageListingUrls = extractIndividualListingUrls(pageLinks, item.portal.code);
+                console.log(`[FASE 2] Página ${pageUrl.match(/pagina=(\d+)/)?.[1] || '?'}: ${pageListingUrls.length} anúncios individuais`);
+                
+                // If no individual URLs but has content, save as multi-listing for AI
+                if (pageListingUrls.length === 0 && pageMd.length > 500 && looksLikeMultiListing(pageMd)) {
+                  scrapedPages.push({
+                    url: pageUrl,
+                    portal: item.portal,
+                    markdown: pageMd.substring(0, 12000),
+                    status: "ok",
+                    isMultiListing: true,
+                  } as any);
+                }
+                
+                return pageListingUrls;
+              } catch (err) {
+                console.warn(`[FASE 2] Pagination scrape failed: ${pageUrl}`, err);
+                return [];
+              }
+            }));
+
+            for (const result of paginationResults) {
+              if (result.status === "fulfilled") {
+                allIndividualUrls.push(...result.value);
+              }
+            }
+            allIndividualUrls = [...new Set(allIndividualUrls)];
+          }
+          
+          if (allIndividualUrls.length > 0) {
+            // Found individual listing URLs — scrape each one
+            const MAX_EXPANDED = 20;
+            const newUrls = allIndividualUrls
               .filter(u => !scrapedUrlSet.has(u.replace(/\/$/, "").toLowerCase()))
               .slice(0, MAX_EXPANDED);
             
-            console.log(`[FASE 2] Multi-listing expandido: ${individualUrls.length} URLs encontradas, ${newUrls.length} novas adicionadas à fila`);
+            console.log(`[FASE 2] Multi-listing expandido: ${allIndividualUrls.length} URLs totais (com paginação), ${newUrls.length} novas para scrape`);
             
-            // Add expanded URLs to the processing queue
             for (const expandedUrl of newUrls) {
               const normalized = expandedUrl.replace(/\/$/, "").toLowerCase();
               if (scrapedUrlSet.has(normalized)) continue;
               scrapedUrlSet.add(normalized);
               
-              // Scrape each expanded URL individually
               try {
                 listingsOpened++;
                 if (pr) pr.urls_opened++;
@@ -661,7 +759,6 @@ serve(async (req) => {
               }
             }
             
-            // Don't add the multi-listing page itself as a single listing
             continue;
           }
           
