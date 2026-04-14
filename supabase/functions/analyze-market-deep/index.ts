@@ -1073,13 +1073,18 @@ Extraia todos os imóveis relevantes. Descarte apenas se claramente incompatíve
       }
 
       const priceSqm = Math.round(c.price / c.area);
-      const isSameCondo = property.condominium && c.condominium &&
-        c.condominium.toLowerCase().includes(property.condominium.toLowerCase());
+      const compCondo = (c.condominium || "").toLowerCase();
+      const subjCondo = (property.condominium || "").toLowerCase();
+      const isSameCondo = subjCondo && compCondo &&
+        (compCondo.includes(subjCondo) || subjCondo.includes(compCondo));
 
       let score = 0;
       if (isSameCondo) score += 25;
-      if (c.neighborhood && property.neighborhood &&
-        c.neighborhood.toLowerCase().includes(property.neighborhood.toLowerCase())) score += 20;
+      if (c.neighborhood && property.neighborhood) {
+        const compNeigh = c.neighborhood.toLowerCase();
+        const subjNeigh = property.neighborhood.toLowerCase();
+        if (compNeigh.includes(subjNeigh) || subjNeigh.includes(compNeigh)) score += 20;
+      }
       if (c.property_type && property.property_type &&
         c.property_type.toLowerCase().includes(property.property_type.toLowerCase())) score += 15;
       
@@ -1098,8 +1103,9 @@ Extraia todos os imóveis relevantes. Descarte apenas se claramente incompatíve
       else if (avgDiff <= 1) score += 6;
       else if (avgDiff <= 2) score += 2;
 
-      if (c.construction_standard && property.property_standard &&
-        c.construction_standard.toLowerCase().includes(property.property_standard.toLowerCase())) score += 10;
+      const subjStandard = ((property as any).construction_standard || (property as any).property_standard || "").toLowerCase();
+      if (c.construction_standard && subjStandard &&
+        (c.construction_standard.toLowerCase().includes(subjStandard) || subjStandard.includes(c.construction_standard.toLowerCase()))) score += 10;
 
       const subjectDiffs: string[] = (property as any).differentials || [];
       const compDiffs: string[] = c.differentials || [];
@@ -1112,8 +1118,11 @@ Extraia todos os imóveis relevantes. Descarte apenas se claramente incompatíve
         else if (ratio >= 0.25) score += 3;
       }
 
-      if (c.city && property.city &&
-        c.city.toLowerCase().includes(property.city.toLowerCase()) && score >= 30) score += 5;
+      if (c.city && property.city) {
+        const compCity = c.city.toLowerCase();
+        const subjCity = property.city.toLowerCase();
+        if (compCity.includes(subjCity) || subjCity.includes(compCity)) score += 5;
+      }
 
       const similarity = Math.min(100, Math.round(score));
 
@@ -1145,6 +1154,15 @@ Extraia todos os imóveis relevantes. Descarte apenas se claramente incompatíve
     const finalComparables = validComparables.slice(0, maxResults);
 
     console.log(`[FASE 3] ${finalComparables.length} comparáveis válidos finais`);
+    
+    // Log top 5 discarded by similarity for debugging
+    const discardedBySimilarity = discardReasons
+      .filter(d => d.reason.startsWith("Similaridade"))
+      .slice(0, 5);
+    if (discardedBySimilarity.length > 0) {
+      console.log(`[FASE 3] Top ${discardedBySimilarity.length} descartados por similaridade:`,
+        JSON.stringify(discardedBySimilarity));
+    }
 
     // Pricing analysis
     let pricingAnalysis = null;
