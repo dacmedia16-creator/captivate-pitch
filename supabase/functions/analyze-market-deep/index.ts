@@ -722,18 +722,37 @@ serve(async (req) => {
     // ==========================================
     console.log(`[FASE 3] Extraindo dados de ${scrapedPages.length} páginas com IA...`);
 
+    const hasMultiListingPages = scrapedPages.some((p: any) => p.isMultiListing);
+
     const combinedContent = scrapedPages
       .map(
-        (p, i) =>
-          `--- Anúncio ${i + 1} (Portal: ${p.portal.name}, URL: ${p.url}) ---\n${p.markdown}`
+        (p: any, i: number) => {
+          const label = p.isMultiListing
+            ? `--- LISTAGEM MÚLTIPLA ${i + 1} (Portal: ${p.portal.name}, URL: ${p.url}) ---`
+            : `--- Anúncio ${i + 1} (Portal: ${p.portal.name}, URL: ${p.url}) ---`;
+          return `${label}\n${p.markdown}`;
+        }
       )
       .join("\n\n");
+
+    const multiListingInstructions = hasMultiListingPages
+      ? `\n\nATENÇÃO - LISTAGENS MÚLTIPLAS:
+- Blocos marcados "--- LISTAGEM MÚLTIPLA ---" contêm VÁRIOS imóveis numa mesma página (ex: página de condomínio).
+- Extraia CADA imóvel individualmente como um comparável separado.
+- Use a URL da página como source_url para todos os imóveis extraídos da mesma listagem.
+- NÃO trate a página inteira como um único imóvel.`
+      : "";
 
     const systemPrompt = `Você é um perito avaliador imobiliário brasileiro. Analise CADA anúncio individualmente e extraia dados estruturados.
 
 REGRAS CRÍTICAS:
-- Cada bloco "--- Anúncio X ---" é UM anúncio individual já validado (página aberta e verificada).
+- Cada bloco "--- Anúncio X ---" é UM anúncio individual já validado (página aberta e verificada).${multiListingInstructions}
 - Extraia EXATAMENTE os dados que estão no anúncio. NÃO invente dados.
+- Se um dado não está claro, use null/0.
+- Preços no formato "R$ 1.200.000" → converta para número 1200000.
+- Áreas "120 m²" → número 120.
+- Inclua o URL EXATO do anúncio no campo source_url.
+- Inclua o nome do portal no campo source_name.
 - Se um dado não está claro, use null/0.
 - Preços no formato "R$ 1.200.000" → converta para número 1200000.
 - Áreas "120 m²" → número 120.
