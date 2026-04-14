@@ -4,7 +4,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { generatePresentationSections } from "@/hooks/useGeneratePresentation";
 import { WizardStepper } from "@/components/wizard/WizardStepper";
-import { WizardStepper } from "@/components/wizard/WizardStepper";
 import { StepPropertyData, PropertyData } from "@/components/wizard/StepPropertyData";
 import { StepLayoutStyle, LayoutStyleData } from "@/components/wizard/StepLayoutStyle";
 import { StepMarketStudy, MarketStudyData } from "@/components/wizard/StepMarketStudy";
