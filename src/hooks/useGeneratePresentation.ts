@@ -52,7 +52,7 @@ async function fetchMarketData(presentation: any) {
   let report: any = null;
 
   if (presentation.market_study_id) {
-    // Official flow
+    // OFFICIAL FLOW: read from market_study_comparables & market_study_results
     const [compsRes, resultRes] = await Promise.all([
       supabase.from("market_study_comparables").select("*").eq("market_study_id", presentation.market_study_id).eq("is_approved", true),
       supabase.from("market_study_results").select("*").eq("market_study_id", presentation.market_study_id).single(),
@@ -60,7 +60,8 @@ async function fetchMarketData(presentation: any) {
     comparables = compsRes.data || [];
     report = resultRes.data;
   } else {
-    // Legacy fallback
+    // LEGACY COMPAT (read-only): fallback for pre-migration presentations without market_study_id.
+    // Tables market_analysis_jobs, market_comparables, market_reports are read-only — no new data is written.
     const { data: jobs } = await supabase.from("market_analysis_jobs").select("id").eq("presentation_id", presentation.id);
     if (jobs && jobs.length > 0) {
       const jobId = jobs[0].id;
