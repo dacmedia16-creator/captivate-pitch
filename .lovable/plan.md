@@ -1,73 +1,118 @@
 
 
-# Plano: Corrigir scoring de similaridade (19 → 3 válidos)
+# Relatório de Auditoria Técnica — Motor de Busca de Mercado
 
-## Problemas encontrados
+## Resumo Executivo
 
-### Bug 1 — Direção do `includes` no bairro está invertida
-**Linha 1082**: `c.neighborhood.toLowerCase().includes(property.neighborhood.toLowerCase())`  
-Se IA retorna "Campolim" e o subject é "Parque Campolim", `"campolim".includes("parque campolim")` = FALSE.  
-Deveria ser bidirecional: qualquer um contendo o outro.
+A arquitetura do fluxo oficial (`market_studies`) está **parcialmente consolidada**. O fluxo legado está corretamente isolado como read-only. Porém há um **bug crítico de perda de dados** no modo background: quando `analyze-market-deep` roda via `EdgeRuntime.waitUntil` (retorna 202), os comparáveis extraídos pela IA **nunca são salvos no banco** porque o frontend faz `return` antes do código de inserção, e a edge function não insere comparáveis.
 
-### Bug 2 — Campo `property_standard` não existe no subject
-**Linha 1101**: `property.property_standard` — o subject vem de `market_study_subject_properties` que tem o campo `construction_standard`, não `property_standard`. Resultado: matching de padrão construtivo NUNCA funciona (perde 10 pontos).
+---
 
-### Bug 3 — Bônus de cidade exige score >= 30 primeiro
-**Linha 1116**: `score >= 30` para dar +5 de cidade. Mas se bairro e padrão já falharam (bugs 1 e 2), o score pode estar abaixo de 30 mesmo para imóveis na mesma cidade.
+## Evidências por Arquivo
 
-### Bug 4 — Sem log de scores individuais
-Impossível debugar sem ver o score de cada comparável descartado.
+### 1. Fluxo Oficial (market_studies) — Status: ATIVO
 
-### Impacto estimado
-Com os bugs corrigidos, um imóvel típico do mesmo condomínio + bairro + cidade ganharia:
-- Condomínio: +25
-- Bairro (corrigido): +20
-- Tipo: +15
-- Padrão (corrigido): +10
-- Cidade (bônus): +5
-- **Total base: 75** (vs ~25-35 com bugs)
+| Evidência | Arquivo | Estado |
+|-----------|---------|--------|
+| Tabelas oficiais existem no DB | Schema (market_studies, market_study_comparables, etc.) | ✅ Publicado |
+| RLS policies em todas as tabelas | Schema RLS | ✅ Publicado |
+| Rotas oficiais | `App.tsx` linhas 85-87 (`/market-studies`, `/market-studies/:id`) | ✅ Publicado |
+| Páginas oficiais | `MarketStudies.tsx`, `MarketStudyResult.tsx` | ✅ Publicado |
+| Wizard cria market_study | `AgentNewPresentation.tsx` | ✅ Publicado |
+| Inserção de comparáveis no frontend | `AgentNewPresentation.tsx` linha 283 | ✅ Publicado |
+| seed-demo usa fluxo oficial | `seed-demo/index.ts` | ✅ Publicado |
 
-## Correções (todas em `analyze-market-deep/index.ts`)
+### 2. Fluxo Legado — Status: READ-ONLY CONTROLADO
 
-### 1. Tornar matching de bairro bidirecional
-```typescript
-// De:
-if (c.neighborhood.toLowerCase().includes(property.neighborhood.toLowerCase()))
-// Para:
-const compNeigh = c.neighborhood.toLowerCase();
-const subjNeigh = property.neighborhood.toLowerCase();
-if (compNeigh.includes(subjNeigh) || subjNeigh.includes(compNeigh))
+| Evidência | Arquivo | Estado |
+|-----------|---------|--------|
+| Fallback read-only com comentário `// LEGACY COMPAT` | `useGeneratePresentation.ts` linha 63 | ✅ Correto |
+| Fallback read-only com comentário `// LEGACY COMPAT` | `generate-presentation-text/index.ts` linha 87 | ✅ Correto |
+| Tabelas legadas no schema (market_analysis_jobs, market_comparables, market_reports) | `types.ts` | ✅ Existem, sem writes |
+| Páginas legadas removidas (AgentMarketStudy, MarketStudyDetail) | Busca retorna 0 resultados | ✅ Removidas |
+| Redirects legados funcionais | `App.tsx` linhas 83-84 | ✅ Publicado |
+
+### 3. Código Morto Encontrado
+
+| Arquivo | Problema |
+|---------|----------|
+| `src/hooks/useSimulateComparables.ts` | 210 linhas, **nunca importado**, referencia `market_analysis_job_id` (legado). Código morto. |
+
+### 4. Edge Functions de Scraping — Cascata
+
+| Função | Papel | Estado |
+|--------|-------|--------|
+| `analyze-market-manus` | Tentativa 1 (Manus API) | Publicada |
+| `analyze-market-deep` | Tentativa 2 (Firecrawl + IA) — **principal** | Publicada, 1301 linhas |
+| `analyze-market` | Tentativa 3 (Firecrawl básico) | Publicada |
+
+### 5. Migrations
+
+13 migrations publicadas (todas em `supabase/migrations/`). Não foi possível confirmar conteúdo individual sem leitura completa, mas todas estão no repositório.
+
+---
+
+## Riscos Encontrados
+
+### 🔴 CRÍTICO — Comparáveis perdidos no modo background
+
+**Arquivo**: `AgentNewPresentation.tsx` linhas 221-226 + `analyze-market-deep/index.ts`
+
+Quando `analyze-market-deep` retorna 202 (background processing):
+- Frontend faz `return;` na linha 226 — **nunca executa** o código de scoring e inserção de comparáveis (linhas 271-341)
+- `analyze-market-deep` atualiza `market_studies.status` para `completed` ou `failed`, mas **não insere nenhum registro** em `market_study_comparables`, `market_study_adjustments`, ou `market_study_results`
+- Resultado: estudo fica com status `completed` mas **0 comparáveis** no banco
+
+**Impacto**: Todo estudo que passa pelo modo background (que é o caminho mais comum agora) perde todos os dados extraídos.
+
+### 🟡 MÉDIO — Sem polling no frontend
+
+Quando o estudo roda em background, o frontend mostra toast "processando em background" e faz `return`. Não há polling para atualizar a UI quando o estudo termina. O usuário precisa recarregar a página manualmente.
+
+### 🟡 MÉDIO — Estudos travados em "processing"
+
+Estudos Cannes, Cannes 22, Cannes 23 estão com status `processing` permanentemente. Não há mecanismo de cleanup ou timeout.
+
+### 🟢 BAIXO — Código morto
+
+`useSimulateComparables.ts` — 210 linhas sem uso, referenciando schema legado.
+
+---
+
+## Conclusão Final
+
+**Arquitetura: PARCIALMENTE CONSOLIDADA com bug crítico de dados**
+
+- ✅ Tabelas oficiais, RLS, rotas, páginas — tudo correto e publicado
+- ✅ Legado corretamente isolado como read-only
+- ✅ Páginas legadas removidas, redirects funcionais
+- 🔴 **Bug crítico**: modo background não salva comparáveis no banco
+- 🟡 Sem polling de status no frontend
+- 🟡 Estudos órfãos em "processing" sem cleanup
+
+---
+
+## Prompt Sugerido para o Lovable
+
 ```
+Corrigir o bug crítico do modo background do analyze-market-deep:
 
-### 2. Corrigir campo de padrão construtivo
-```typescript
-// De:
-property.property_standard
-// Para:
-property.construction_standard || property.property_standard
+1. Mover a lógica de scoring, inserção de comparáveis, adjustments e results 
+   de AgentNewPresentation.tsx para DENTRO da edge function analyze-market-deep.
+   A edge function já tem service_role e roda em background — ela deve salvar 
+   tudo diretamente no banco (market_study_comparables, market_study_adjustments, 
+   market_study_results) e atualizar market_studies.status para "completed".
+
+2. Adicionar polling no frontend: quando o estudo está em "processing", 
+   fazer polling a cada 5s no status do market_study. Quando mudar para 
+   "completed", recarregar os dados e continuar o wizard.
+
+3. Criar migration para atualizar estudos órfãos: UPDATE market_studies 
+   SET status = 'failed' WHERE status = 'processing' 
+   AND updated_at < now() - interval '15 minutes'.
+
+4. Deletar src/hooks/useSimulateComparables.ts (código morto).
+
+Ordem de prioridade: 1 > 2 > 3 > 4.
 ```
-
-### 3. Remover pré-requisito de score >= 30 no bônus de cidade
-```typescript
-// De:
-if (c.city... && score >= 30) score += 5;
-// Para:
-if (c.city...) score += 5;
-```
-
-### 4. Adicionar log de scores individuais (top 5 descartados)
-Logar os 5 comparáveis com maior score que foram descartados, mostrando: URL, score, razão.
-
-### 5. Aplicar mesma lógica bidirecional ao condomínio
-Para pegar "Residencial Cannes" vs "Cannes".
-
-## Etapas
-1. Corrigir matching bidirecional (bairro + condomínio)
-2. Corrigir campo `construction_standard`
-3. Remover requisito `score >= 30` do bônus cidade
-4. Adicionar logs de score dos descartados
-5. Deploy + teste
-
-## Arquivo modificado
-`supabase/functions/analyze-market-deep/index.ts` — ~15 linhas alteradas
 
