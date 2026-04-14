@@ -917,7 +917,9 @@ async function processMarketAnalysis(
       ? `\n\nATENÇÃO - LISTAGENS MÚLTIPLAS:
 - Blocos marcados "--- LISTAGEM MÚLTIPLA ---" contêm VÁRIOS imóveis numa mesma página (ex: página de condomínio).
 - Extraia CADA imóvel individualmente como um comparável separado.
-- Use a URL da página como source_url para todos os imóveis extraídos da mesma listagem.
+- Para cada imóvel, extraia o URL INDIVIDUAL do anúncio (o link do card que leva à ficha do imóvel). NÃO use a URL da página de busca para todos.
+- Extraia o external_id (código do anúncio no portal, ex: "id-2446277614", "AP2337-A") de cada card.
+- Se não conseguir encontrar o URL individual, use a URL da página MAS inclua o external_id obrigatoriamente.
 - NÃO trate a página inteira como um único imóvel.`
       : "";
 
@@ -929,8 +931,9 @@ REGRAS CRÍTICAS:
 - Se um dado não está claro, use null/0.
 - Preços no formato "R$ 1.200.000" → converta para número 1200000.
 - Áreas "120 m²" → número 120.
-- Inclua o URL EXATO do anúncio no campo source_url.
+- Inclua o URL INDIVIDUAL do anúncio no campo source_url (o link direto para a ficha do imóvel, não a página de busca).
 - Inclua o nome do portal no campo source_name.
+- Inclua o código/ID do anúncio no portal no campo external_id (ex: "id-2446277614", "AP2337-A", etc).
 
 IMÓVEL DE REFERÊNCIA:
 - Tipo: ${property.property_type || "Não informado"}
@@ -996,6 +999,7 @@ Extraia todos os imóveis relevantes. Descarte apenas se claramente incompatíve
                         differentials: { type: "array", items: { type: "string" } },
                         description_summary: { type: "string" },
                         listing_date: { type: "string" },
+                        external_id: { type: "string", description: "Código/ID do anúncio no portal (ex: id-2446277614, AP2337-A)" },
                       },
                       required: ["title", "price", "area", "source_url", "source_name"],
                     },
