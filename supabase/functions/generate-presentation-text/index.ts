@@ -84,7 +84,8 @@ serve(async (req) => {
       comparables = compsRes.data || [];
       report = repRes.data;
     } else {
-      // Legacy fallback: market_analysis_jobs
+      // LEGACY COMPAT (read-only): fallback for pre-migration presentations without market_study_id.
+      // Tables market_analysis_jobs, market_comparables, market_reports are read-only — no new data is written.
       const { data: jobs } = await supabase.from("market_analysis_jobs").select("id").eq("presentation_id", presentation_id);
       if (jobs && jobs.length > 0) {
         const jobId = jobs[0].id;
