@@ -194,6 +194,41 @@ function extractIndividualListingUrls(links: string[], portalCode: string): stri
   return [...new Set(links.filter(l => pattern.test(l)))];
 }
 
+// Generate pagination URLs from a multi-listing URL
+// e.g. ?pagina=2 → also fetch pagina=1, pagina=3 (up to MAX_PAGES)
+function generatePaginationUrls(url: string, maxPages = 5): string[] {
+  const urls: string[] = [];
+  const paginaMatch = url.match(/([?&])pagina=(\d+)/i);
+  const pageMatch = url.match(/([?&])page=(\d+)/i);
+
+  if (paginaMatch) {
+    const currentPage = parseInt(paginaMatch[2], 10);
+    const startPage = Math.max(1, currentPage - 1);
+    const endPage = Math.min(currentPage + Math.max(2, maxPages - 2), startPage + maxPages - 1);
+    for (let p = startPage; p <= endPage; p++) {
+      urls.push(url.replace(/([?&])pagina=\d+/i, `$1pagina=${p}`));
+    }
+  } else if (pageMatch) {
+    const currentPage = parseInt(pageMatch[2], 10);
+    const startPage = Math.max(1, currentPage - 1);
+    const endPage = Math.min(currentPage + Math.max(2, maxPages - 2), startPage + maxPages - 1);
+    for (let p = startPage; p <= endPage; p++) {
+      urls.push(url.replace(/([?&])page=\d+/i, `$1page=${p}`));
+    }
+  } else if (/\/condominio\//i.test(url) || /\/busca\//i.test(url)) {
+    // No pagination param yet — add pagina=1..maxPages
+    const separator = url.includes("?") ? "&" : "?";
+    for (let p = 1; p <= Math.min(maxPages, 3); p++) {
+      urls.push(`${url}${separator}pagina=${p}`);
+    }
+  }
+
+  // Deduplicate and exclude the original URL
+  const normalized = url.replace(/\/$/, "").toLowerCase();
+  return [...new Set(urls)]
+    .filter(u => u.replace(/\/$/, "").toLowerCase() !== normalized);
+}
+
 // Deduplicate by address+area+price similarity
 function isDuplicate(
   comp: any,
