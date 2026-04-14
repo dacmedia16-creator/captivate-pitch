@@ -1598,6 +1598,61 @@ Extraia todos os imóveis relevantes. Descarte apenas se claramente incompatíve
       });
     }
 
+    // Sync results to linked presentations
+    if (marketStudyId) {
+      try {
+        const { data: linkedPresentations } = await supabase
+          .from("presentations")
+          .select("id, owner_expected_price")
+          .eq("market_study_id", marketStudyId);
+
+        if (linkedPresentations && linkedPresentations.length > 0) {
+          const { data: latestResult } = await supabase
+            .from("market_study_results")
+            .select("*")
+            .eq("market_study_id", marketStudyId)
+            .single();
+
+          const { data: approvedComps } = await supabase
+            .from("market_study_comparables")
+            .select("id")
+            .eq("market_study_id", marketStudyId)
+            .eq("is_approved", true);
+
+          if (latestResult) {
+            for (const pres of linkedPresentations) {
+              await Promise.all([
+                supabase.from("presentation_sections").update({
+                  content: {
+                    status: "completed",
+                    avg_price: latestResult.avg_price,
+                    median_price: latestResult.median_price,
+                    avg_price_per_sqm: latestResult.avg_price_per_sqm,
+                    confidence_level: latestResult.confidence_level,
+                    executive_summary: latestResult.executive_summary,
+                    comparables_count: approvedComps?.length ?? 0,
+                  },
+                }).eq("presentation_id", pres.id).eq("section_key", "market_study_placeholder"),
+                supabase.from("presentation_sections").update({
+                  content: {
+                    owner_expected_price: pres.owner_expected_price,
+                    scenarios: [
+                      { label: "Preço aspiracional", value: latestResult.suggested_ad_price || null },
+                      { label: "Preço de mercado", value: latestResult.suggested_market_price || null },
+                      { label: "Preço de venda rápida", value: latestResult.suggested_fast_sale_price || null },
+                    ],
+                  },
+                }).eq("presentation_id", pres.id).eq("section_key", "pricing_scenarios"),
+              ]);
+            }
+            console.log(`[SYNC] Updated ${linkedPresentations.length} presentation(s) with market study ${marketStudyId}`);
+          }
+        }
+      } catch (syncErr) {
+        console.warn("[SYNC] Failed to sync to presentations (non-fatal):", syncErr);
+      }
+    }
+
     if (marketStudyId) await updateStudyStatus("completed");
 
     return {
