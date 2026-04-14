@@ -1,78 +1,45 @@
 
 
-# Plano: Corrigir 3 bugs críticos no scraping multi-listing
+# Diagnóstico: Cannes 22 travado em "processing"
 
-## Diagnóstico dos logs
+## Causa raiz
 
-O teste revelou **3 bugs** que impediram a extração:
+O "Cannes 22" está com status `processing` desde 03:04 — nunca terminou. Os logs mostram:
 
-### Bug 1 — `looksLikeMultiListing` dispara em páginas individuais
-A função verifica se há 3+ preços e 3+ áreas no markdown. Páginas individuais do VivaReal têm seções "imóveis similares" que contêm múltiplos preços/áreas, fazendo TODA página individual cair no fluxo multi-listing.
+1. **FASE 1**: 25 URLs coletadas (15 nativo + 10 Google) — OK
+2. **FASE 2**: 39 páginas válidas de 43 abertas — expandiu condomínio com paginação (15 URLs do Cannes) + scrapeou 25 originais + bairros como multi-listing
+3. **FASE 3**: "Extraindo dados de 39 páginas com IA..." — **último log**. Nada depois.
 
-**Evidência**: Log mostra "Multi-listing sem URLs individuais" para TODAS as 25 URLs, incluindo `/imovel/` individuais.
+O edge function **morreu por timeout** durante a chamada à IA. 39 páginas × ~4000-12000 chars cada = prompt gigantesco enviado ao Gemini. A chamada de IA sozinha leva 30-60s, mas a função já gastou ~2 minutos só no scraping. Total excede o timeout do edge function (~150s max).
 
-### Bug 2 — `isMultiListingUrl` não exclui URLs individuais
-O check `isMultiListingUrl` testa apenas padrões positivos (`/condominio/`, `?pagina=`), mas não exclui URLs que já são individuais (`/imovel/`). Na prática, uma URL individual vinda de expansão que tenha `?pagina=` na query string (raro, mas possível) seria tratada como multi-listing.
+Como a função morre abruptamente, nunca executa o código que atualiza o status para `completed` ou `failed`. Resultado: fica eternamente em `processing`.
 
-### Bug 3 — Busca genérica ignora o condomínio-alvo
-A FASE 1A constrói URL genérica do bairro (`/venda/sp/sorocaba/parque-campolim/`). Nunca usa a URL do condomínio que o usuário queria. Os resultados do Google também são genéricos. Resultado: 25 imóveis de bairro genérico, muitos de cidades erradas (Rio de Janeiro apareceu nos logs), todos filtrados por similaridade < 40.
+## Problemas secundários confirmados nos logs
+
+- **Google retorna Rio de Janeiro** para busca de Sorocaba (URLs de `/imovel/...rio-de-janeiro...` nos logs)
+- **Bairros genéricos** (não-condomínio) sendo scraped e tratados como multi-listing (desperdiça tempo e créditos)
 
 ## Correções propostas
 
-Todas em `supabase/functions/analyze-market-deep/index.ts`:
+### 1. Background processing com `EdgeRuntime.waitUntil`
+Retornar `202 Accepted` imediatamente e processar em background. Atualizar status no banco conforme progride. O frontend já faz polling no status.
 
-### Correção 1 — Proteger URLs individuais do fluxo multi-listing
+### 2. Cap de páginas para extração IA
+Limitar a 20 páginas enviadas para a IA. Priorizar: páginas do condomínio-alvo > individuais > multi-listing genérico.
 
-```typescript
-function isIndividualListingUrl(url: string): boolean {
-  return /\/imovel\//i.test(url) || /\/propriedades\//i.test(url);
-}
-```
+### 3. Pré-filtro de cidade antes da IA
+Descartar URLs que claramente pertencem a outra cidade (ex: `/rio-de-janeiro/` quando a busca é Sorocaba) ANTES de scrapeá-las, economizando tempo e créditos.
 
-Na FASE 2 (linha 641), mudar de:
-```
-if (isMultiListing || looksLikeMultiListing(markdown))
-```
-para:
-```
-if (!isIndividualListingUrl(item.url) && (isMultiListing || looksLikeMultiListing(markdown)))
-```
+### 4. Atualizar status para "failed" em caso de erro
+Wrap principal em try/catch que sempre atualiza o status, mesmo em timeout parcial.
 
-### Correção 2 — Priorizar condomínio na FASE 1A
-
-Quando `property.condominium` existe, construir URL de condomínio do VivaReal como primeira URL nativa, junto com a URL genérica de bairro. Exemplo:
-- URL condomínio: `vivareal.com.br/venda/sp/sorocaba/parque-campolim/?condominium=residencial-cannes`
-- URL bairro: mantém a atual como fallback
-
-Alternativamente, detectar se a busca de search do Google pode incluir o nome do condomínio na query.
-
-### Correção 3 — Incluir nome do condomínio na query do Google (FASE 1B)
-
-Na função `buildSearchQuery`, quando `property.condominium` existe, adicioná-lo à query:
-```
-"apartamento 2 quartos Residencial Cannes Parque Campolim Sorocaba venda site:vivareal.com.br"
-```
-
-Atualmente o condomínio **não aparece** na query.
-
-### Correção 4 — Baixar threshold de similaridade para condomínios
-
-Quando o comparável é do mesmo condomínio, dar score bônus garantido (já tem +25), mas também baixar o threshold mínimo de similaridade para 25 (em vez de 40) quando a busca é focada em condomínio. Isso evita descartar imóveis do mesmo prédio.
+## Arquivo modificado
+`supabase/functions/analyze-market-deep/index.ts`
 
 ## Etapas
-
-1. Adicionar `isIndividualListingUrl()` e usá-la como guard na FASE 2
-2. Adicionar condomínio à query Google na `buildSearchQuery`
-3. Na FASE 1A, quando condomínio existe, buscar URL com filtro de condomínio
-4. Baixar minSimilarity para 25 quando preferSameCondominium=true
-5. Deploy + teste com a URL do Cannes
-
-## Arquivos modificados
-
-| Arquivo | Mudança |
-|---------|---------|
-| `supabase/functions/analyze-market-deep/index.ts` | 4 correções pontuais |
-
-## Riscos
-- Nenhum risco estrutural. São fixes isolados de lógica.
+1. Implementar `EdgeRuntime.waitUntil` — retornar 202, processar em background
+2. Adicionar filtro de cidade nas URLs da FASE 1/2
+3. Limitar páginas enviadas à IA (max 20, priorizando condomínio)
+4. Garantir try/catch com status update em todo cenário de falha
+5. Deploy e re-testar Cannes 22
 
