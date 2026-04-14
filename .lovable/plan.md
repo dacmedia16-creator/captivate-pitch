@@ -1,45 +1,36 @@
 
 
-# Plano: Corrigir mistura de aluguéis com vendas no scoring
+# Plano: Corrigir URLs individuais dos comparáveis
 
-## Problema confirmado
-
-O teste completo do Cannes mostrou que o fluxo background funciona — 8 comparáveis foram inseridos no banco com adjustments e results. Porém **4 dos 8 comparáveis são aluguéis** (R$ 3.000-4.300/mês) misturados com vendas (R$ 650.000-1.600.000), distorcendo brutalmente as métricas:
-
-- avg_price calculado: R$ 453.111 (deveria ser ~R$ 670.000+)
-- median_price: R$ 327.150 (sem sentido)
+## Problema
+A IA extrai múltiplos imóveis de uma página de resultados de busca e usa a URL da página de busca como `source_url` para todos. Resultado: 8 de 10 comparáveis apontam para a mesma URL genérica de busca, não para o anúncio individual.
 
 ## Causa raiz
+No prompt de extração (`analyze-market-deep/index.ts`, linha 920):
+> "Use a URL da página como source_url para todos os imóveis extraídos da mesma listagem."
 
-O filtro de similaridade (`calculateSimilarityScore`) não verifica o propósito (venda vs aluguel). A IA extrai corretamente os títulos com "para alugar" e "para comprar", mas o scoring aceita ambos.
+Essa instrução contradiz a linha 932:
+> "Inclua o URL EXATO do anúncio no campo source_url."
 
-## Correções em `supabase/functions/analyze-market-deep/index.ts`
+## Correção em `supabase/functions/analyze-market-deep/index.ts`
 
-### 1. Filtrar por propósito no scoring
-Adicionar verificação: se o título do comparável contém "alugar"/"aluguel" e o subject é "venda" (ou vice-versa), descartar com score = 0.
+### 1. Atualizar o prompt de extração
+Substituir a instrução conflitante por:
+- "Para cada imóvel, extraia o URL individual do anúncio (link que leva direto à ficha do imóvel). Se a página é de resultados de busca, cada card deve ter um link individual — use esse link."
+- "Se não for possível extrair o URL individual, use a URL da página e adicione o external_id do imóvel."
+- Adicionar campo `individual_url` como alternativa no schema.
 
-```typescript
-// No início do calculateSimilarityScore ou antes dele:
-const subjectPurpose = property.property_purpose || "venda";
-const isRental = /alugu[e]?[lr]|para alugar/i.test(c.title || "");
-const isSale = /comprar|venda/i.test(c.title || "");
+### 2. Fallback: construir URL individual quando possível
+Após extração, se o `source_url` parece ser uma URL de busca (não contém `/imovel/` ou `id-`), e o `external_id` está presente, tentar montar a URL individual do portal. Para VivaReal/ZAP: `https://www.vivareal.com.br/imovel/{external_id}`.
 
-if (subjectPurpose === "venda" && isRental && !isSale) return 0;
-if (subjectPurpose === "aluguel" && isSale && !isRental) return 0;
-```
-
-### 2. Filtrar por faixa de preço razoável (heurística)
-Quando o subject é "venda" e o preço do comparável é < R$ 10.000, descartar (é claramente aluguel). Vice-versa para aluguel.
-
-### 3. Filtrar URLs de aluguel na FASE 1
-Na URL prioritization, descartar URLs com `/aluguel/` quando o propósito é venda.
+### 3. Instrução no prompt para extrair external_id
+Reforçar no prompt que o `external_id` é o código do anúncio no portal (ex: "id-2446277614") e deve ser extraído de cada card de resultado.
 
 ## Etapas
-1. Adicionar filtro de propósito por título no scoring
-2. Adicionar heurística de preço mínimo para vendas (< R$10k = descarte)
-3. Filtrar URLs `/aluguel/` na FASE 1 quando purpose = venda
-4. Deploy + re-teste com curl no mesmo study_id
+1. Corrigir prompt conflitante (remover linha 920, reforçar extração de URL individual)
+2. Adicionar lógica de fallback para montar URL individual a partir do external_id
+3. Deploy + teste
 
 ## Arquivo modificado
-`supabase/functions/analyze-market-deep/index.ts`
+`supabase/functions/analyze-market-deep/index.ts` — ~10 linhas alteradas no prompt + ~15 linhas de fallback
 
