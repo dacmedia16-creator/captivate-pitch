@@ -1,84 +1,68 @@
 
-# Fase Final — Consolidação do Estudo de Mercado
 
-## Diagnóstico atual
+# Plano: Suporte a páginas de condomínio multi-listing no scraping
 
-### Onde o legado ainda vive
+## Problema
 
-| Local | Tabelas legadas usadas | Necessário? |
-|-------|----------------------|-------------|
-| `useGeneratePresentation.ts` L62-73 | `market_analysis_jobs`, `market_comparables`, `market_reports` | Sim — apresentações antigas sem `market_study_id` |
-| `generate-presentation-text/index.ts` L87-95 | Idem | Sim — mesma razão |
-| `AgentMarketStudy.tsx` | `market_analysis_jobs` | Não — já marcado `@deprecated`, rotas redirecionam |
-| `MarketStudyDetail.tsx` | `market_analysis_jobs`, `market_comparables`, `market_reports` | Não — já marcado `@deprecated`, rotas redirecionam |
-| `useMarketCalculations.ts` (useSaveMarketReport) | `market_reports` | Não — já marcado `@deprecated` |
-| `seed-demo/index.ts` | `market_analysis_jobs`, `market_comparables`, `market_reports` | Deveria ser atualizado para o fluxo novo |
+A URL `vivareal.com.br/condominio/...` é uma página de **listagem de condomínio** que contém 26 imóveis. O fluxo atual (`analyze-market-deep`) trata cada URL scraped como um anúncio individual, então a IA extrai apenas 1 imóvel de uma página que tem 26.
 
-### Rotas atuais
+## Causa raiz
 
-- `/market-studies` → `MarketStudies.tsx` — **oficial**
-- `/market-studies/:id` → `MarketStudyResult.tsx` — **oficial**
-- `/market-study` → `Navigate` para `/market-studies` — **redirect OK**
-- `/market-study/:id` → `LegacyStudyRedirect` — **redirect OK**
+Dois pontos no `analyze-market-deep`:
 
-### Rastreabilidade
+1. **FASE 1A** (scrape nativo): O regex para VivaReal filtra apenas URLs com `/imovel/`. URLs `/condominio/` não são reconhecidas como páginas de busca nem como anúncios individuais.
 
-Já existe estrutura suficiente:
-- `market_study_executions` — portal, status, contagens, erro
-- `market_study_raw_listings` — dados brutos por portal/execução
-- `market_study_comparables.origin` — manual vs auto
-- `market_study_comparables.raw_listing_id` — link ao listing bruto
+2. **FASE 2** (extração por IA): O system prompt diz *"Cada bloco '--- Anúncio X ---' é UM anúncio individual já validado"*. Quando uma página de condomínio com 26 imóveis entra nessa fase, a IA recebe a instrução de que é apenas 1 anúncio.
 
-Não é necessário criar novas tabelas.
+## Solução proposta
 
----
+Modificar **apenas** `analyze-market-deep/index.ts`:
 
-## Decisões
+### Mudança 1 — Detectar páginas multi-listing
 
-1. **Tabelas legadas** (`market_analysis_jobs`, `market_comparables`, `market_reports`) — ficam somente leitura no banco. Nenhum código novo deve escrever nelas.
-2. **Fallback no backend** — mantido apenas em `generate-presentation-text` e `useGeneratePresentation`, com comentário explícito `// LEGACY COMPAT: read-only fallback for pre-migration presentations`.
-3. **Páginas legadas** — `AgentMarketStudy.tsx` e `MarketStudyDetail.tsx` podem ser deletadas (rotas já redirecionam).
-4. **seed-demo** — atualizar para criar dados no fluxo novo.
+Após o scrape na FASE 2, antes de enviar para a IA, detectar se a URL é uma página de listagem (não um anúncio individual). Critérios:
+- URL contém `/condominio/`, `/busca/`, ou padrões de listagem conhecidos
+- O markdown é longo (>2000 chars) e contém múltiplos padrões de preço (`R$`)
 
----
+### Mudança 2 — Separar fluxo de extração
 
-## Plano de implementação
+Para páginas detectadas como multi-listing:
+- Enviar para a IA com prompt diferente: *"Esta é uma página de LISTAGEM contendo VÁRIOS imóveis. Extraia CADA imóvel individualmente."*
+- Extrair URLs individuais dos links da página (já disponíveis via formato `links` do Firecrawl)
+- Se encontrar URLs individuais, adicioná-las à fila de scrape
 
-### Etapa 1 — Rotas e navegação
-- Deletar `AgentMarketStudy.tsx` e `MarketStudyDetail.tsx`
-- Remover imports e lazy loads correspondentes do `App.tsx`
-- Manter os `Navigate`/`LegacyStudyRedirect` para URLs antigas
-- Sidebar já aponta para `/market-studies` — sem mudança
+### Mudança 3 — Atualizar o scrape da FASE 2 para pedir links
 
-### Etapa 2 — Fallbacks legados
-- Em `useGeneratePresentation.ts`: adicionar comentário claro `// LEGACY COMPAT (read-only)` no bloco else
-- Em `generate-presentation-text/index.ts`: idem
-- Em `useMarketCalculations.ts`: remover `useSaveMarketReport` (deprecated, não usado pelo fluxo novo)
+Adicionar `"links"` ao array de formatos no scrape individual:
+```
+formats: ["markdown", "links"]
+```
 
-### Etapa 3 — seed-demo
-- Atualizar `seed-demo/index.ts` para criar `market_studies`, `market_study_subject_properties`, `market_study_comparables`, `market_study_results` em vez das tabelas legadas
-- Setar `presentations.market_study_id` no seed
+Quando a página for detectada como multi-listing, extrair os links individuais (`/imovel/`) e re-enqueá-los para scrape individual.
 
-### Etapa 4 — Documentação
-- Atualizar `mem://features/market-study-architecture` com status final
-- Listar tabelas legadas como "read-only, não deletar"
+### Mudança 4 — Ajustar prompt da IA na FASE 3
 
-### Etapa 5 — Validação
-- Testar criação de apresentação nova (fluxo oficial)
-- Testar geração de textos com IA
-- Testar `/market-studies` e `/market-studies/:id`
-- Testar redirect de `/market-study`
+O prompt da FASE 3 deve ter duas variantes:
+- **Anúncio individual**: prompt atual (sem mudanças)
+- **Página de listagem**: prompt que diz explicitamente para extrair todos os imóveis da página
 
-### Riscos e rollback
-- **Risco**: apresentações antigas sem `market_study_id` — mitigado pelo fallback mantido
-- **Rollback**: restaurar arquivos deletados do git se necessário (são páginas isoladas)
+## Arquivos modificados
 
-### Tabelas legadas — decisão final
+| Arquivo | Mudança |
+|---------|---------|
+| `supabase/functions/analyze-market-deep/index.ts` | Detectar multi-listing, extrair links individuais, ajustar prompt |
 
-| Tabela | Ação |
-|--------|------|
-| `market_analysis_jobs` | Manter no banco (read-only). Não deletar. |
-| `market_comparables` | Idem |
-| `market_reports` | Idem |
+## Etapas de implementação
 
-Podem ser removidas no futuro após migração de dados históricos (se desejado).
+1. Adicionar função `isMultiListingUrl(url)` que detecta URLs de condomínio/busca
+2. Na FASE 2, ao scrape de uma URL multi-listing, pedir formato `["markdown", "links"]`
+3. Se links individuais forem encontrados: adicioná-los à fila (com dedup)
+4. Se não encontrar links individuais: enviar o markdown para a IA com prompt multi-listing
+5. Ajustar o prompt da FASE 3 para tratar ambos os casos
+6. Deploy e teste
+
+## Riscos
+
+- **Timeout**: scraping adicional de URLs individuais pode estourar o timeout da edge function. Mitigação: limitar a 10-15 URLs extras.
+- **Créditos Firecrawl**: mais scrapes = mais créditos. Mitigação: só expandir multi-listing se detectado.
+
