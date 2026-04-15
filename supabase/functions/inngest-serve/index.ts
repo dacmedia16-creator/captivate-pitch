@@ -602,8 +602,18 @@ async function scoreAndSave(
   const resMeta = { portals_checked: portalResults, total_listings_found: totalUrlsFound, listings_opened: listingsOpened, listings_discarded: allDiscards.length, discard_reasons: allDiscards, filters_used: filters, collected_at: new Date().toISOString(), limitations };
   console.log(`[INNGEST][RESULTADO] ${finalComparables.length} comp, ${listingsOpened} abertos, ${allDiscards.length} desc`);
 
-  // Save to DB
+  // Save to DB (idempotent — clean old data from retries first)
   if (marketStudyId && finalComparables.length > 0) {
+    // Delete previous auto_firecrawl comparables + their adjustments + results to avoid duplicates on retry
+    const { data: oldComps } = await supabase.from("market_study_comparables").select("id").eq("market_study_id", marketStudyId).eq("origin", "auto_firecrawl");
+    if (oldComps && oldComps.length > 0) {
+      const oldIds = oldComps.map(c => c.id);
+      await supabase.from("market_study_adjustments").delete().in("comparable_id", oldIds);
+      await supabase.from("market_study_comparables").delete().eq("market_study_id", marketStudyId).eq("origin", "auto_firecrawl");
+    }
+    await supabase.from("market_study_results").delete().eq("market_study_id", marketStudyId);
+    console.log("[INNGEST][DB] Cleaned old data for idempotency");
+
     const { data: subProps } = await supabase.from("market_study_subject_properties").select("*").eq("market_study_id", marketStudyId).limit(1);
     const subProp = subProps?.[0] || null;
     const studyComps = finalComparables.map((c: any) => ({ market_study_id: marketStudyId, title: c.title || null, address: c.address || null, neighborhood: c.neighborhood || null, city: c.city || null, condominium: c.condominium || null, property_type: c.property_type || null, price: c.price || null, area: c.area || null, price_per_sqm: c.price_per_sqm || null, bedrooms: c.bedrooms || null, suites: c.suites || null, parking_spots: c.parking_spots || null, construction_standard: c.construction_standard || null, similarity_score: c.similarity_score || 0, source_name: c.source_name || null, source_url: c.source_url || null, is_approved: true, origin: "auto_firecrawl", raw_data: c.raw_data || null }));
