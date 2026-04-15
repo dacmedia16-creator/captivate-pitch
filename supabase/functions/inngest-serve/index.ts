@@ -196,8 +196,10 @@ function buildPortalNativeUrl(property: PropertyData, portal: PortalInfo): strin
       return `https://www.imovelweb.com.br/${typeSlug}-${purposeSlug}-${neighborhood}-${city}.html`;
     case "quintoandar":
       return `https://www.quintoandar.com.br/${isRental ? "alugar" : "comprar"}/imovel/${city}/${neighborhood}`;
-    case "vipseven":
-      return `https://vipsevenimoveis.com.br/imoveis/${purposeSlug}`;
+    case "vipseven": {
+      const fin = purposeSlug === "venda" ? "venda" : "aluguel";
+      return `https://vipsevenimoveis.com.br/imoveis?finalidade=${fin}`;
+    }
     default:
       return null;
   }
