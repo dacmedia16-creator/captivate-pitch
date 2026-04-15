@@ -1690,11 +1690,12 @@ serve(async (req) => {
   }
 
   try {
-    const { property, portals, filters, market_study_id } = (await req.json()) as {
+    const { property, portals, filters, market_study_id, tenant_id } = (await req.json()) as {
       property: PropertyData;
       portals: PortalInfo[];
       filters: Filters;
       market_study_id?: string;
+      tenant_id?: string;
     };
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
@@ -1711,6 +1712,44 @@ serve(async (req) => {
         JSON.stringify({ success: false, error: "LOVABLE_API_KEY not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // === RATE LIMITING & PLAN LIMITS ===
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+
+    if (tenant_id) {
+      // Check plan limits
+      const { data: limitOk } = await adminClient.rpc("check_tenant_limit", {
+        _tenant_id: tenant_id,
+        _field: "market_studies",
+      });
+      if (limitOk === false) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Limite mensal de estudos de mercado atingido. Faça upgrade do plano." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Check concurrency (max 2 simultaneous processing studies per tenant)
+      const { count } = await adminClient
+        .from("market_studies")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenant_id)
+        .eq("status", "processing");
+      if ((count ?? 0) >= 2) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Máximo de 2 estudos simultâneos. Aguarde a conclusão de um estudo." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Increment usage counter
+      await adminClient.rpc("increment_tenant_usage", {
+        _tenant_id: tenant_id,
+        _field: "market_studies_count",
+      });
     }
 
     const studyId = market_study_id || null;
