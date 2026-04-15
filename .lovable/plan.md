@@ -1,47 +1,89 @@
 
 
-# Indicador de progresso por fase no estudo de mercado
+# Melhorar scraping do Kenlo com Firecrawl v2 JSON extraction
 
-## Abordagem
+## Problema
 
-Usar uma coluna `current_phase` na tabela `market_studies` que o edge function atualiza a cada step do Inngest. O frontend já faz polling no status — basta ler essa coluna extra e renderizar um stepper visual.
+O Kenlo é um portal SPA (Single Page Application) pesado em JavaScript. O scraping atual pega markdown, que frequentemente retorna < 1000 chars — conteúdo insuficiente para a IA extrair dados estruturados. Resultado: 0 comparáveis do Kenlo mesmo com ~17 URLs abertas.
 
-## Fases
+## Solução
 
-| Phase value | Label no frontend |
-|---|---|
-| `collecting_urls` | Coletando URLs dos portais |
-| `scraping` | Abrindo páginas dos anúncios |
-| `extracting` | Extraindo dados com IA |
-| `scoring` | Analisando e salvando resultados |
-| `completed` | Concluído |
+Usar o formato `json` do Firecrawl v2 com um schema definido para páginas do Kenlo. Em vez de depender do markdown (que precisa de renderização JS completa), o Firecrawl v2 usa LLM interno para extrair dados estruturados diretamente da página, mesmo com renderização parcial.
 
 ## Mudanças
 
-### 1. Migration: adicionar coluna `current_phase`
-```sql
-ALTER TABLE market_studies ADD COLUMN current_phase text DEFAULT NULL;
+### 1. `supabase/functions/inngest-serve/index.ts` — `scrapeUrlBatch`
+
+Para URLs do Kenlo, mudar o request ao Firecrawl v2:
+
+**Antes** (linha ~402):
+```ts
+formats: ["markdown"], waitFor: 10000
++ actions de scroll/wait
 ```
 
-### 2. `supabase/functions/inngest-serve/index.ts`
-Adicionar updates de `current_phase` no início de cada step:
-- `set-processing` → `current_phase: 'collecting_urls'`
-- `scrape-batch-0` (só no primeiro batch) → `current_phase: 'scraping'`
-- `ai-extraction` → `current_phase: 'extracting'`
-- `score-and-save` → `current_phase: 'scoring'`
-- No final (status=completed) → `current_phase: 'completed'`
+**Depois**:
+```ts
+// Para Kenlo individual listings: usar extract (JSON) do Firecrawl v2
+formats: ["extract"],
+extract: {
+  schema: {
+    type: "object",
+    properties: {
+      title: { type: "string" },
+      price: { type: "number", description: "Preço em reais, sem pontos" },
+      area: { type: "number", description: "Área total em m²" },
+      bedrooms: { type: "number" },
+      suites: { type: "number" },
+      parking_spots: { type: "number" },
+      bathrooms: { type: "number" },
+      address: { type: "string" },
+      neighborhood: { type: "string" },
+      city: { type: "string" },
+      condominium: { type: "string" },
+      external_id: { type: "string", description: "Código do imóvel" },
+      description: { type: "string" }
+    },
+    required: ["title", "price", "area"]
+  },
+  prompt: "Extraia os dados deste anúncio imobiliário brasileiro."
+}
+```
 
-### 3. `src/pages/agent/AgentNewPresentation.tsx` — polling
-No `pollStudyStatus`, selecionar também `current_phase` e passar para o `StepGeneration`.
+- Se o Firecrawl v2 retornar `extract` com dados válidos (price > 0, area > 0), converter diretamente em comparável e **pular a fase de extração AI** para esse item — economizando tokens e tempo.
+- Manter fallback para markdown caso o extract falhe ou retorne dados incompletos.
+- Para URLs de listagem múltipla do Kenlo, continuar usando `["markdown", "links"]` pois precisamos dos links individuais.
 
-### 4. `src/components/wizard/StepGeneration.tsx` — UI do stepper
-Adicionar uma seção "Estudo de Mercado" abaixo do stepper existente (que é para a apresentação). Quando `marketPhase` está definido, mostrar um stepper com as 4 fases do mercado com ícones de status (spinner na fase atual, check nas concluídas, cinza nas pendentes).
+### 2. Adaptar `ScrapedPage` para carregar dados pré-extraídos
 
-### 5. `src/pages/agent/MarketStudyResult.tsx` — indicador na página de resultado
-Quando `study.status === 'processing'`, mostrar o mesmo stepper de fases em vez do conteúdo, usando `study.current_phase` para indicar progresso. Adicionar `refetchInterval` de 5s quando status é `processing`.
+Adicionar campo opcional `extractedData` ao type `ScrapedPage`:
+```ts
+interface ScrapedPage {
+  // ...existing fields
+  extractedData?: {  // Pre-extracted by Firecrawl v2 JSON
+    title?: string; price?: number; area?: number;
+    bedrooms?: number; suites?: number; parking_spots?: number;
+    address?: string; neighborhood?: string; condominium?: string;
+    external_id?: string;
+  };
+}
+```
+
+### 3. Adaptar `extractWithAI` (Fase 3)
+
+- Separar páginas com `extractedData` válido — essas viram comparáveis diretamente sem passar pela IA.
+- Apenas páginas sem `extractedData` vão para o prompt do Gemini.
+- Merge dos dois conjuntos no resultado final.
 
 ## Escopo
-- 1 migration (1 coluna)
-- 3 arquivos editados (inngest handler, StepGeneration, MarketStudyResult)
-- 1 arquivo editado levemente (AgentNewPresentation — polling)
+
+- 1 arquivo editado: `supabase/functions/inngest-serve/index.ts`
+- ~60 linhas modificadas em 3 funções (scrapeUrlBatch, ScrapedPage type, extractWithAI)
+- Sem migrations, sem mudanças no frontend
+
+## Benefícios
+
+- Kenlo passa a gerar comparáveis reais (Firecrawl LLM lida com JS-heavy pages melhor que markdown)
+- Menos tokens gastos no Gemini (páginas Kenlo pré-extraídas não vão para o prompt)
+- Mesma abordagem pode ser estendida a outros portais problemáticos no futuro
 
