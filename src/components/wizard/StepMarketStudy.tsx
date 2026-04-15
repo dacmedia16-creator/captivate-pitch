@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -61,6 +62,17 @@ export function StepMarketStudy({ data, onChange }: StepMarketStudyProps) {
     },
     enabled: true,
   });
+
+  useEffect(() => {
+    if (portalList && portalList.length > 0 && data.selectedPortals.length === 0) {
+      const enabledIds = portalList
+        .filter((p: any) => p.is_enabled)
+        .map((p: any) => p.id);
+      if (enabledIds.length > 0) {
+        onChange({ ...data, selectedPortals: enabledIds });
+      }
+    }
+  }, [portalList]);
 
   const togglePortal = (portalId: string) => {
     const selected = data.selectedPortals.includes(portalId)
