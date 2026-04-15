@@ -40,6 +40,7 @@ async function fetchWithRetry(
     }
   }
   throw lastError || new Error("fetchWithRetry: all attempts failed");
+}
 
 const PORTAL_SITE_MAP: Record<string, string> = {
   zap: "site:zapimoveis.com.br",
