@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,14 @@ export default function MarketStudyResult() {
       return data;
     },
     enabled: !!id,
+    refetchInterval: (query) => {
+      const d = query.state.data as any;
+      return d?.status === "processing" ? 5000 : false;
+    },
   });
+
+  const isProcessing = study?.status === "processing";
+  const currentPhase = (study as any)?.current_phase as string | null;
 
   const { data: adjustmentsMap } = useQuery({
     queryKey: ["market-study-adjustments", id],
@@ -326,6 +334,61 @@ export default function MarketStudyResult() {
       <div className="text-center py-20">
         <p className="text-lg text-muted-foreground">Estudo não encontrado</p>
         <Button variant="outline" className="mt-4" onClick={() => navigate("/market-studies")}>Voltar</Button>
+      </div>
+    );
+  }
+
+  if (isProcessing) {
+    const marketPhases = [
+      { key: "collecting_urls", label: "Coletando URLs dos portais", icon: Search },
+      { key: "scraping", label: "Abrindo páginas dos anúncios", icon: FileText },
+      { key: "extracting", label: "Extraindo dados com IA", icon: Sparkles },
+      { key: "scoring", label: "Analisando e salvando resultados", icon: BarChart3 },
+    ];
+    const phaseIndex = currentPhase ? marketPhases.findIndex(p => p.key === currentPhase) : -1;
+
+    return (
+      <div className="max-w-lg mx-auto py-16 space-y-8">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/market-studies")}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <h1 className="text-2xl font-bold font-display">{study.title || "Estudo de Mercado"}</h1>
+        </div>
+        <div className="text-center space-y-3">
+          <div className="flex justify-center mb-4">
+            <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 text-primary animate-spin" />
+            </div>
+          </div>
+          <h2 className="text-xl font-semibold">Processando estudo de mercado...</h2>
+          <p className="text-sm text-muted-foreground">Aguarde enquanto analisamos os portais imobiliários.</p>
+        </div>
+        <div className="space-y-2">
+          {marketPhases.map((phase, i) => {
+            const Icon = phase.icon;
+            const isDone = i < phaseIndex;
+            const isCurrent = i === phaseIndex;
+            return (
+              <div key={phase.key} className={cn("flex items-center gap-3 p-3.5 rounded-xl transition-all duration-300", isDone || isCurrent ? "bg-card shadow-sm" : "opacity-30")}>
+                {isDone ? (
+                  <div className="h-8 w-8 rounded-full gold-gradient flex items-center justify-center shadow-sm">
+                    <CheckCircle className="h-4 w-4 text-primary-foreground" />
+                  </div>
+                ) : isCurrent ? (
+                  <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center shadow-sm">
+                    <Loader2 className="h-4 w-4 text-primary-foreground animate-spin" />
+                  </div>
+                ) : (
+                  <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                )}
+                <span className={cn("text-sm", isDone || isCurrent ? "font-medium" : "text-muted-foreground")}>{phase.label}</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   }
