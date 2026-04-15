@@ -154,7 +154,7 @@ function isIndividualListingUrl(url: string): boolean {
 }
 
 function slugify(text: string): string {
-  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").replace(/^-+|-+$/g, "");
 }
 
 function getPropertyTypeSlug(type: string | undefined, portal: string): string {
@@ -183,11 +183,8 @@ function buildPortalNativeUrl(property: PropertyData, portal: PortalInfo): strin
   switch (portal.code) {
     case "zap":
       return `https://www.zapimoveis.com.br/${purposeSlug}/${typeSlug}/${state}+${city}+${neighborhood}/`;
-    case "vivareal": {
-      const baseVivaUrl = `https://www.vivareal.com.br/${purposeSlug}/${state}/${city}/${neighborhood}/apartamento_residencial/`;
-      if (property.condominium) return `${baseVivaUrl}?filtro=condominium:${slugify(property.condominium)}`;
-      return baseVivaUrl;
-    }
+    case "vivareal":
+      return `https://www.vivareal.com.br/${purposeSlug}/${state}/${city}/${neighborhood}/${typeSlug}_residencial/`;
     case "olx":
       return `https://www.olx.com.br/imoveis/${purposeSlug}/${typeSlug}/estado-${state}/${city}-e-regiao/${neighborhood}`;
     case "imovelweb":
