@@ -1,32 +1,32 @@
 
 
-# QuintoAndar não aparece no wizard de estudo de mercado
+# Adicionar portal VIP Seven Imóveis
 
-## Diagnóstico
+## O que será feito
 
-O QuintoAndar foi inserido corretamente na tabela `portal_sources` (confirmado via query). Porém, o componente `SearchConfigForm` só mostra portais que já têm um registro em `tenant_portal_settings` com `is_enabled = true` para o tenant do usuário.
-
-Como o QuintoAndar é novo, nenhum tenant tem um registro habilitado para ele — então não aparece na lista do wizard.
-
-## Solução
-
-Duas opções — recomendo ambas:
-
-### 1. Caminho rápido: habilitar QuintoAndar para o tenant atual
-Criar um registro em `tenant_portal_settings` para o tenant do usuário (via migration).
-
-### 2. Correção estrutural no SearchConfigForm
-Alterar o `SearchConfigForm` para mostrar **todos os portais globais** (`is_global = true`) da tabela `portal_sources`, mesmo que o tenant não tenha um registro em `tenant_portal_settings`. Portais globais aparecem pré-selecionados por padrão. Isso resolve o problema para todos os tenants automaticamente.
+Adicionar o portal VIP Seven Imóveis (vipsevenimoveis.com.br) como fonte de pesquisa de mercado.
 
 ## Mudanças
 
-### `src/components/market-study/SearchConfigForm.tsx`
-Mudar a query para buscar `portal_sources` com `is_global = true` e fazer LEFT JOIN com `tenant_portal_settings`. Portais globais sem registro no tenant aparecem habilitados por padrão. Portais com `is_global = false` só aparecem se tiverem registro habilitado.
+### 1. Inserir registro no banco (via insert tool)
+```sql
+INSERT INTO public.portal_sources (name, code, base_url, is_global)
+VALUES ('VIP Seven Imóveis', 'vipseven', 'https://vipsevenimoveis.com.br', true);
+```
 
-### Sem migration necessária
-A correção no frontend resolve para todos os tenants e portais futuros.
+### 2. `supabase/functions/inngest-serve/index.ts`
+- Adicionar `vipseven: "site:vipsevenimoveis.com.br"` ao `PORTAL_SITE_MAP`
+- Adicionar case `"vipseven"` em `buildPortalNativeUrl` → retorna `https://vipsevenimoveis.com.br/imoveis/{venda|aluguel}`
+- Adicionar pattern `vipseven: /vipsevenimoveis\.com\.br\/imovel\//` em `extractIndividualListingUrls`
+
+### 3. `supabase/functions/analyze-market/index.ts`
+- Adicionar `vipseven: "site:vipsevenimoveis.com.br"` ao `PORTAL_SITE_MAP`
+
+### 4. `supabase/functions/analyze-market-manus/index.ts`
+- Adicionar `vipseven: "https://vipsevenimoveis.com.br"` ao `PORTAL_URLS`
 
 ## Escopo
-- 1 arquivo editado: `SearchConfigForm.tsx` (~15 linhas na query)
-- QuintoAndar (e qualquer portal global futuro) aparecerá automaticamente
+- 1 insert no banco
+- 3 edge functions editadas (~5 linhas cada)
+- Portal aparecerá automaticamente para todos os tenants (is_global = true)
 
