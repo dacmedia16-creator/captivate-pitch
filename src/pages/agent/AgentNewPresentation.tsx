@@ -214,7 +214,7 @@ export default function AgentNewPresentation() {
       try {
         const { data: deepResult, error: deepError } = await supabase.functions.invoke("analyze-market-deep", { body: analyzeBody });
         // 202 = background processing — edge function saves comparables directly to DB
-        if (!deepError && deepResult?.message === "Processing started in background") {
+        if (!deepError && deepResult?.success && !deepResult?.comparables?.length && deepResult?.market_study_id) {
           console.log("Market analysis running in background for study:", study.id);
           toast.info("Estudo de mercado sendo processado em background...");
           // Poll for completion
