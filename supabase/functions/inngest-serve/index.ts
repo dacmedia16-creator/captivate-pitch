@@ -186,7 +186,7 @@ function buildPortalNativeUrl(property: PropertyData, portal: PortalInfo): strin
     case "vivareal":
       return `https://www.vivareal.com.br/${purposeSlug}/${state}/${city}/${neighborhood}/${typeSlug}_residencial/`;
     case "olx":
-      return `https://www.olx.com.br/imoveis/${purposeSlug}/${typeSlug}/estado-${state}/${city}-e-regiao/${neighborhood}`;
+      return null; // OLX não suporta filtro por cidade via URL — usar apenas Google Search
     case "imovelweb":
       return `https://www.imovelweb.com.br/${typeSlug}-${purposeSlug}-${neighborhood}-${city}.html`;
     default:
@@ -207,7 +207,7 @@ function looksLikeMultiListing(markdown: string): boolean {
 function extractIndividualListingUrls(links: string[], portalCode: string, markdown?: string): string[] {
   const listingPatterns: Record<string, RegExp> = {
     zap: /zapimoveis\.com\.br\/imovel\//, vivareal: /vivareal\.com\.br\/imovel\//,
-    olx: /olx\.com\.br\/.*\/imoveis\//,
+    olx: /olx\.com\.br\/d\/anuncio\//,
     imovelweb: /imovelweb\.com\.br\/propriedades\//,
   };
   const pattern = listingPatterns[portalCode];
@@ -310,7 +310,7 @@ async function collectUrls(
       const scrapeData = await scrapeRes.json();
       const links: string[] = scrapeData.data?.links || scrapeData.links || [];
       const markdown: string = scrapeData.data?.markdown || scrapeData.markdown || "";
-      const listingPatterns: Record<string, RegExp> = { zap: /zapimoveis\.com\.br\/imovel\//, vivareal: /vivareal\.com\.br\/imovel\//, olx: /olx\.com\.br\/.*\/imoveis\//, imovelweb: /imovelweb\.com\.br\/propriedades\// };
+      const listingPatterns: Record<string, RegExp> = { zap: /zapimoveis\.com\.br\/imovel\//, vivareal: /vivareal\.com\.br\/imovel\//, olx: /olx\.com\.br\/d\/anuncio\//, imovelweb: /imovelweb\.com\.br\/propriedades\// };
       const pattern = listingPatterns[portal.code];
       const listingUrls = pattern ? links.filter(l => pattern.test(l)) : [];
       console.log(`[INNGEST][FASE 1A] ${portal.name}: ${links.length} links, ${listingUrls.length} anúncios`);
