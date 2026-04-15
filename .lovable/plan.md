@@ -1,50 +1,31 @@
 
 
-# Por que "Viva Real: 24 encontrados, 0 válidos"
+# Corrigir OLX: 21 encontrados, 0 válidos
 
 ## Diagnóstico
 
-Investiguei os dados do estudo `e4851263` (Sorocaba, Parque Campolim, Condomínio Cannes) e encontrei a causa raiz:
+Mesmo problema do Viva Real: a URL nativa gerada (`/imoveis/venda/apartamentos/estado-sp/sorocaba-e-regiao/parque-campolim`) não funciona no OLX. O site ignora os segmentos de cidade/bairro e retorna resultados de todo o estado de São Paulo. O filtro `isWrongCityUrl` corretamente descarta tudo como "Outra cidade".
 
-**Todos os 14+ URLs do Viva Real foram descartados com razão "Outra cidade"** — os links retornados eram de **Rio de Janeiro**, não de Sorocaba.
+Além disso, o regex para identificar anúncios individuais do OLX está errado — usa `/imoveis/` mas os anúncios reais usam `/d/anuncio/`.
 
-### O que aconteceu:
-
-1. A URL nativa gerada foi:
-   `https://www.vivareal.com.br/venda/sp/sorocaba/parque-campolim/apartamento_residencial/?filtro=condominium:cannes-`
-
-2. O `slugify("Cannes ")` gerou `cannes-` (com traço no final por causa do espaço no nome do condomínio), criando um filtro inválido `?filtro=condominium:cannes-`
-
-3. Viva Real não encontrou resultados válidos e retornou uma **página de erro/showcase** com anúncios aleatórios do Rio de Janeiro
-
-4. O Google Search do Viva Real também retornou resultados de RJ
-
-5. O filtro `isWrongCityUrl` corretamente descartou todos como "Outra cidade" — por isso 0 válidos
-
-**O sistema está funcionando corretamente ao descartar** — o problema é na **geração da URL do Viva Real**.
-
-## Correção proposta
+## Correções
 
 ### `supabase/functions/inngest-serve/index.ts`
 
-1. **Corrigir `slugify`** — remover traços no início/final do resultado:
+1. **Remover URL nativa do OLX** — OLX não suporta filtragem por cidade/bairro via URL. Retornar `null` no `buildPortalNativeUrl` para o case `"olx"`, forçando uso apenas do Google Search (que já inclui cidade+bairro na query):
    ```typescript
-   function slugify(text: string): string {
-     return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-       .toLowerCase().replace(/\s+/g, "-")
-       .replace(/[^a-z0-9-]/g, "").replace(/^-+|-+$/g, "");
-   }
+   case "olx":
+     return null; // OLX não suporta filtro por cidade via URL
    ```
 
-2. **Corrigir URL do Viva Real** — o formato real é `/venda/{state}/{city}/{bairro}/{tipo}/` sem `?filtro=condominium:`. O filtro de condomínio não funciona assim no Viva Real. Remover esse parâmetro e deixar só a busca por bairro:
+2. **Corrigir regex de listing do OLX** — trocar `olx\.com\.br\/.*\/imoveis\/` por `olx\.com\.br\/d\/anuncio\/` nos dois lugares onde aparece (linhas 313 e ~210):
    ```typescript
-   case "vivareal":
-     return `https://www.vivareal.com.br/${purposeSlug}/${state}/${city}/${neighborhood}/${typeSlug}_residencial/`;
+   olx: /olx\.com\.br\/d\/anuncio\//
    ```
 
-3. **Redeploy** da edge function `inngest-serve`
+3. **Redeploy** da edge function
 
 ## Escopo
-- 1 arquivo editado (2 alterações pequenas)
+- 1 arquivo editado (3 alterações pequenas)
 - Redeploy de 1 edge function
 
