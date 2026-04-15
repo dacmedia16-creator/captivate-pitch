@@ -37,6 +37,7 @@ const AgentNewPresentation = lazy(() => import("@/pages/agent/AgentNewPresentati
 const AgentProfile = lazy(() => import("@/pages/agent/AgentProfile"));
 const MarketStudies = lazy(() => import("@/pages/agent/MarketStudies"));
 const MarketStudyResult = lazy(() => import("@/pages/agent/MarketStudyResult"));
+const MarketStudyExecutions = lazy(() => import("@/pages/agent/MarketStudyExecutions"));
 
 // Legacy redirect helper
 const LegacyStudyRedirect = () => {
