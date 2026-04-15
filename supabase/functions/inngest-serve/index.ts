@@ -1,9 +1,9 @@
-import { Inngest } from "https://esm.sh/inngest@3.27.5";
-import { serve } from "https://esm.sh/inngest@3.27.5/deno";
+import { Inngest } from "https://esm.sh/inngest";
+import { serve } from "https://esm.sh/inngest/edge";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 // ============================================================
-// Types (shared with analyze-market-deep)
+// Types
 // ============================================================
 interface PropertyData {
   property_type?: string;
@@ -69,16 +69,12 @@ async function fetchWithRetry(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const res = await fetch(url, options);
-      if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 429)) {
-        return res;
-      }
+      if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 429)) return res;
       if (attempt < maxRetries) {
         const delay = baseDelayMs * Math.pow(2, attempt);
         console.log(`[RETRY] Attempt ${attempt + 1}/${maxRetries}, waiting ${delay}ms (status: ${res.status})`);
         await new Promise(r => setTimeout(r, delay));
-      } else {
-        return res;
-      }
+      } else return res;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       if (attempt < maxRetries) {
@@ -165,10 +161,7 @@ function buildPortalNativeUrl(property: PropertyData, portal: PortalInfo): strin
       return `https://www.zapimoveis.com.br/${purposeSlug}/${typeSlug}/${state}+${city}+${neighborhood}/`;
     case "vivareal": {
       const baseVivaUrl = `https://www.vivareal.com.br/${purposeSlug}/${state}/${city}/${neighborhood}/apartamento_residencial/`;
-      if (property.condominium) {
-        const condoSlug = slugify(property.condominium);
-        return `${baseVivaUrl}?filtro=condominium:${condoSlug}`;
-      }
+      if (property.condominium) return `${baseVivaUrl}?filtro=condominium:${slugify(property.condominium)}`;
       return baseVivaUrl;
     }
     case "kenlo": {
@@ -187,8 +180,7 @@ function buildPortalNativeUrl(property: PropertyData, portal: PortalInfo): strin
 }
 
 function isMultiListingUrl(url: string): boolean {
-  const patterns = [/\/condominio\//i, /\/busca\//i, /\/resultado\//i, /[?&]pagina=/i, /[?&]page=/i];
-  return patterns.some(p => p.test(url));
+  return [/\/condominio\//i, /\/busca\//i, /\/resultado\//i, /[?&]pagina=/i, /[?&]page=/i].some(p => p.test(url));
 }
 
 function looksLikeMultiListing(markdown: string): boolean {
@@ -199,10 +191,8 @@ function looksLikeMultiListing(markdown: string): boolean {
 
 function extractIndividualListingUrls(links: string[], portalCode: string): string[] {
   const listingPatterns: Record<string, RegExp> = {
-    zap: /zapimoveis\.com\.br\/imovel\//,
-    vivareal: /vivareal\.com\.br\/imovel\//,
-    kenlo: /portal\.kenlo\.com\.br\/imovel\//,
-    olx: /olx\.com\.br\/.*\/imoveis\//,
+    zap: /zapimoveis\.com\.br\/imovel\//, vivareal: /vivareal\.com\.br\/imovel\//,
+    kenlo: /portal\.kenlo\.com\.br\/imovel\//, olx: /olx\.com\.br\/.*\/imoveis\//,
     imovelweb: /imovelweb\.com\.br\/propriedades\//,
   };
   const pattern = listingPatterns[portalCode];
@@ -215,18 +205,16 @@ function generatePaginationUrls(url: string, maxPages = 5): string[] {
   const paginaMatch = url.match(/([?&])pagina=(\d+)/i);
   const pageMatch = url.match(/([?&])page=(\d+)/i);
   if (paginaMatch) {
-    const currentPage = parseInt(paginaMatch[2], 10);
-    const startPage = Math.max(1, currentPage - 1);
-    const endPage = Math.min(currentPage + Math.max(2, maxPages - 2), startPage + maxPages - 1);
-    for (let p = startPage; p <= endPage; p++) urls.push(url.replace(/([?&])pagina=\d+/i, `$1pagina=${p}`));
+    const cp = parseInt(paginaMatch[2], 10);
+    const sp = Math.max(1, cp - 1), ep = Math.min(cp + Math.max(2, maxPages - 2), sp + maxPages - 1);
+    for (let p = sp; p <= ep; p++) urls.push(url.replace(/([?&])pagina=\d+/i, `$1pagina=${p}`));
   } else if (pageMatch) {
-    const currentPage = parseInt(pageMatch[2], 10);
-    const startPage = Math.max(1, currentPage - 1);
-    const endPage = Math.min(currentPage + Math.max(2, maxPages - 2), startPage + maxPages - 1);
-    for (let p = startPage; p <= endPage; p++) urls.push(url.replace(/([?&])page=\d+/i, `$1page=${p}`));
+    const cp = parseInt(pageMatch[2], 10);
+    const sp = Math.max(1, cp - 1), ep = Math.min(cp + Math.max(2, maxPages - 2), sp + maxPages - 1);
+    for (let p = sp; p <= ep; p++) urls.push(url.replace(/([?&])page=\d+/i, `$1page=${p}`));
   } else if (/\/condominio\//i.test(url) || /\/busca\//i.test(url)) {
-    const separator = url.includes("?") ? "&" : "?";
-    for (let p = 1; p <= Math.min(maxPages, 3); p++) urls.push(`${url}${separator}pagina=${p}`);
+    const sep = url.includes("?") ? "&" : "?";
+    for (let p = 1; p <= Math.min(maxPages, 3); p++) urls.push(`${url}${sep}pagina=${p}`);
   }
   const normalized = url.replace(/\/$/, "").toLowerCase();
   return [...new Set(urls)].filter(u => u.replace(/\/$/, "").toLowerCase() !== normalized);
@@ -248,38 +236,27 @@ function isWrongCityUrl(url: string, targetCity: string | undefined): boolean {
   const urlLower = url.toLowerCase();
   if (urlLower.includes(targetSlug)) return false;
   const knownCities = [
-    "rio-de-janeiro", "sao-paulo", "belo-horizonte", "curitiba",
-    "porto-alegre", "salvador", "brasilia", "fortaleza", "recife",
-    "manaus", "goiania", "campinas", "santos", "guarulhos", "niteroi",
-    "sorocaba", "jundiai", "piracicaba", "bauru", "ribeirao-preto",
-    "uberlandia", "joinville", "florianopolis", "londrina", "maringa",
-    "osasco", "santo-andre", "sao-bernardo", "sao-jose-dos-campos",
-    "mogi-das-cruzes", "diadema", "carapicuiba", "maua", "suzano",
-    "taubate", "limeira", "franca", "praia-grande", "sao-vicente",
-    "americana", "itu", "indaiatuba", "tatui", "votorantim",
+    "rio-de-janeiro","sao-paulo","belo-horizonte","curitiba","porto-alegre","salvador","brasilia",
+    "fortaleza","recife","manaus","goiania","campinas","santos","guarulhos","niteroi","sorocaba",
+    "jundiai","piracicaba","bauru","ribeirao-preto","uberlandia","joinville","florianopolis",
+    "londrina","maringa","osasco","santo-andre","sao-bernardo","sao-jose-dos-campos",
+    "mogi-das-cruzes","diadema","carapicuiba","maua","suzano","taubate","limeira","franca",
+    "praia-grande","sao-vicente","americana","itu","indaiatuba","tatui","votorantim",
   ];
   for (const city of knownCities) {
     if (city === targetSlug) continue;
-    if (
-      urlLower.includes(`/${city}/`) || urlLower.includes(`/${city}?`) ||
-      urlLower.includes(`/${city}-e-regiao`) || urlLower.includes(`+${city}+`) ||
-      urlLower.includes(`+${city}/`) || urlLower.includes(`-${city}-`)
-    ) return true;
+    if (urlLower.includes(`/${city}/`) || urlLower.includes(`/${city}?`) || urlLower.includes(`/${city}-e-regiao`) ||
+        urlLower.includes(`+${city}+`) || urlLower.includes(`+${city}/`) || urlLower.includes(`-${city}-`)) return true;
   }
   return false;
 }
 
 // ============================================================
-// processMarketAnalysis — full scraping + AI + persistence logic
-// (moved from analyze-market-deep to run as durable Inngest function)
+// processMarketAnalysis — full scraping + AI + persistence
 // ============================================================
 async function processMarketAnalysis(
-  property: PropertyData,
-  portals: PortalInfo[],
-  filters: Filters,
-  marketStudyId: string | null,
-  FIRECRAWL_API_KEY: string,
-  LOVABLE_API_KEY: string,
+  property: PropertyData, portals: PortalInfo[], filters: Filters,
+  marketStudyId: string | null, FIRECRAWL_API_KEY: string, LOVABLE_API_KEY: string,
 ) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -301,1103 +278,415 @@ async function processMarketAnalysis(
     if (searchablePortals.length === 0) {
       limitations.push("Nenhum portal com mapeamento de busca configurado");
       if (marketStudyId) await updateStudyStatus("completed");
-      return {
-        success: true, comparables: [],
-        research_metadata: {
-          portals_checked: portalResults, total_listings_found: 0,
-          listings_opened: 0, listings_discarded: 0,
-          discard_reasons: discardReasons, filters_used: filters,
-          collected_at: new Date().toISOString(), limitations,
-        },
-        pricing_analysis: null,
-      };
+      return { success: true, comparables: [], research_metadata: { portals_checked: portalResults, total_listings_found: 0, listings_opened: 0, listings_discarded: 0, discard_reasons: discardReasons, filters_used: filters, collected_at: new Date().toISOString(), limitations }, pricing_analysis: null };
     }
 
     const limitedPortals = searchablePortals;
     const maxResults = Math.min(Number(filters.maxComparables) || 15, 20);
     const resultsPerPortal = Math.max(5, Math.min(Math.ceil((maxResults * 2) / limitedPortals.length), 10));
 
-    // ==========================================
     // FASE 1A: Scrape nativo
-    // ==========================================
     console.log(`[INNGEST][FASE 1A] Scraping nativo em ${limitedPortals.length} portais...`);
-
     const nativeUrls: Array<{ url: string; title: string; portal: PortalInfo; snippet: string }> = [];
 
     const nativeScrapeResults = await Promise.allSettled(limitedPortals.map(async (portal) => {
       const nativeUrl = buildPortalNativeUrl(property, portal);
-      if (!nativeUrl) {
-        console.log(`[INNGEST][FASE 1A] ${portal.name}: sem URL nativa`);
-        return { urls: [] as any[], limitation: null as string | null };
-      }
-
+      if (!nativeUrl) return { urls: [] as any[], limitation: null as string | null };
       console.log(`[INNGEST][FASE 1A] ${portal.name}: ${nativeUrl}`);
-
       try {
         const scrapeRes = await fetchWithRetry("https://api.firecrawl.dev/v1/scrape", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
+          method: "POST", headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
           body: JSON.stringify({ url: nativeUrl, formats: ["markdown", "links"], onlyMainContent: true, waitFor: 5000 }),
         });
-
-        if (!scrapeRes.ok) {
-          const errStatus = scrapeRes.status;
-          await scrapeRes.text();
-          console.warn(`[INNGEST][FASE 1A] ${portal.name}: scrape failed (${errStatus})`);
-          return { urls: [] as any[], limitation: `${portal.name}: scrape nativo falhou (${errStatus})` };
-        }
-
+        if (!scrapeRes.ok) { const s = scrapeRes.status; await scrapeRes.text(); return { urls: [] as any[], limitation: `${portal.name}: scrape nativo falhou (${s})` }; }
         const scrapeData = await scrapeRes.json();
         const links: string[] = scrapeData.data?.links || scrapeData.links || [];
         const markdown: string = scrapeData.data?.markdown || scrapeData.markdown || "";
-
-        const listingPatterns: Record<string, RegExp> = {
-          zap: /zapimoveis\.com\.br\/imovel\//,
-          vivareal: /vivareal\.com\.br\/imovel\//,
-          kenlo: /portal\.kenlo\.com\.br\/imovel\//,
-          olx: /olx\.com\.br\/.*\/imoveis\//,
-          imovelweb: /imovelweb\.com\.br\/propriedades\//,
-        };
-
+        const listingPatterns: Record<string, RegExp> = { zap: /zapimoveis\.com\.br\/imovel\//, vivareal: /vivareal\.com\.br\/imovel\//, kenlo: /portal\.kenlo\.com\.br\/imovel\//, olx: /olx\.com\.br\/.*\/imoveis\//, imovelweb: /imovelweb\.com\.br\/propriedades\// };
         const pattern = listingPatterns[portal.code];
         const listingUrls = pattern ? links.filter(l => pattern.test(l)) : [];
-
         console.log(`[INNGEST][FASE 1A] ${portal.name}: ${links.length} links, ${listingUrls.length} anúncios`);
-
         if (listingUrls.length > 0) {
-          const dedupedUrls = [...new Set(listingUrls)].slice(0, 20);
-          return { urls: dedupedUrls.map(url => ({ url, title: "", portal, snippet: "native-scrape" })), limitation: null };
+          return { urls: [...new Set(listingUrls)].slice(0, 20).map(url => ({ url, title: "", portal, snippet: "native-scrape" })), limitation: null };
         }
-
         if (markdown.length > 200) {
-          console.log(`[INNGEST][FASE 1A] ${portal.name}: usando markdown (${markdown.length} chars) para extrair URLs via IA...`);
           try {
             const extractRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-              method: "POST",
-              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({
-                model: "google/gemini-2.5-flash",
-                messages: [
-                  { role: "system", content: `Extraia todas as URLs de anúncios individuais de imóveis desta página de resultados do portal ${portal.name}. Retorne APENAS URLs que apontam para páginas de anúncios individuais (não páginas de busca/listagem). Se não encontrar URLs individuais, retorne array vazio.` },
-                  { role: "user", content: markdown.substring(0, 8000) },
-                ],
-                tools: [{
-                  type: "function",
-                  function: {
-                    name: "extract_urls",
-                    description: "Extrair URLs de anúncios individuais",
-                    parameters: { type: "object", properties: { urls: { type: "array", items: { type: "string" } } }, required: ["urls"] },
-                  },
-                }],
-                tool_choice: { type: "function", function: { name: "extract_urls" } },
-              }),
+              method: "POST", headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ model: "google/gemini-2.5-flash", messages: [{ role: "system", content: `Extraia URLs de anúncios individuais do portal ${portal.name}. Retorne APENAS URLs individuais.` }, { role: "user", content: markdown.substring(0, 8000) }], tools: [{ type: "function", function: { name: "extract_urls", description: "Extrair URLs", parameters: { type: "object", properties: { urls: { type: "array", items: { type: "string" } } }, required: ["urls"] } } }], tool_choice: { type: "function", function: { name: "extract_urls" } } }),
             });
             if (extractRes.ok) {
-              const extractData = await extractRes.json();
-              const tc = extractData.choices?.[0]?.message?.tool_calls?.[0];
-              if (tc) {
-                const parsed = JSON.parse(tc.function.arguments);
-                const extractedUrls: string[] = parsed.urls || [];
-                console.log(`[INNGEST][FASE 1A] ${portal.name}: IA extraiu ${extractedUrls.length} URLs`);
-                const dedupedUrls = [...new Set(extractedUrls)].slice(0, 20);
-                return { urls: dedupedUrls.map(url => ({ url, title: "", portal, snippet: "native-ai-extract" })), limitation: null };
-              }
-            } else {
-              await extractRes.text();
-            }
-          } catch (aiErr) {
-            console.warn(`[INNGEST][FASE 1A] ${portal.name}: AI extraction failed`, aiErr);
-          }
+              const tc = (await extractRes.json()).choices?.[0]?.message?.tool_calls?.[0];
+              if (tc) { const urls: string[] = JSON.parse(tc.function.arguments).urls || []; if (urls.length > 0) return { urls: [...new Set(urls)].slice(0, 20).map(url => ({ url, title: "", portal, snippet: "native-ai-extract" })), limitation: null }; }
+            } else { await extractRes.text(); }
+          } catch (aiErr) { console.warn(`[INNGEST][FASE 1A] ${portal.name}: AI failed`, aiErr); }
         }
-
-        return { urls: [] as any[], limitation: `${portal.name}: nenhum anúncio individual no scrape nativo` };
-      } catch (err) {
-        console.error(`[INNGEST][FASE 1A] ${portal.name} exception:`, err);
-        return { urls: [] as any[], limitation: `${portal.name}: erro no scrape nativo` };
-      }
+        return { urls: [] as any[], limitation: `${portal.name}: nenhum anúncio no scrape nativo` };
+      } catch (err) { console.error(`[INNGEST][FASE 1A] ${portal.name}:`, err); return { urls: [] as any[], limitation: `${portal.name}: erro` }; }
     }));
+    for (const r of nativeScrapeResults) { if (r.status === "fulfilled") { nativeUrls.push(...r.value.urls); if (r.value.limitation) limitations.push(r.value.limitation); } }
+    console.log(`[INNGEST][FASE 1A] Total: ${nativeUrls.length} URLs`);
 
-    for (const result of nativeScrapeResults) {
-      if (result.status === "fulfilled") {
-        const { urls, limitation } = result.value;
-        nativeUrls.push(...urls);
-        if (limitation) limitations.push(limitation);
-      }
-    }
-
-    console.log(`[INNGEST][FASE 1A] Total: ${nativeUrls.length} URLs de scrape nativo`);
-
-    // ==========================================
     // FASE 1B: Google Search
-    // ==========================================
-    console.log(`[INNGEST][FASE 1B] Buscando em ${limitedPortals.length} portais via Google...`);
-
+    console.log(`[INNGEST][FASE 1B] Google search em ${limitedPortals.length} portais...`);
     const googleUrls: Array<{ url: string; title: string; portal: PortalInfo; snippet: string }> = [];
-
     const portalSearchResults = await Promise.allSettled(limitedPortals.map(async (portal) => {
       const query = buildSearchQuery(property, portal, filters);
-      console.log(`[INNGEST][FASE 1B] ${portal.name}: "${query}"`);
-
-      const portalResult: PortalResult = { portal_name: portal.name, portal_code: portal.code, urls_found: 0, urls_opened: 0, urls_valid: 0 };
-
+      const pr: PortalResult = { portal_name: portal.name, portal_code: portal.code, urls_found: 0, urls_opened: 0, urls_valid: 0 };
       try {
         const searchRes = await fetchWithRetry("https://api.firecrawl.dev/v1/search", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
+          method: "POST", headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
           body: JSON.stringify({ query, limit: resultsPerPortal, lang: "pt-br", country: "br" }),
         });
-
-        if (!searchRes.ok) {
-          await searchRes.text();
-          console.error(`[INNGEST][FASE 1B] ${portal.name} error: ${searchRes.status}`);
-          const limitation = searchRes.status === 402 ? `Firecrawl: créditos insuficientes` : `${portal.name}: erro na busca Google (${searchRes.status})`;
-          return { portalResult, urls: [] as any[], limitation };
-        }
-
-        const searchData = await searchRes.json();
-        const results = searchData.data || [];
-        portalResult.urls_found = results.length;
-        console.log(`[INNGEST][FASE 1B] ${portal.name}: ${results.length} URLs do Google`);
-
-        const urls = results.filter((r: any) => r.url).map((r: any) => ({ url: r.url, title: r.title || "", portal, snippet: r.description || "" }));
-        return { portalResult, urls, limitation: null as string | null };
-      } catch (err) {
-        console.error(`[INNGEST][FASE 1B] ${portal.name} exception:`, err);
-        return { portalResult, urls: [] as any[], limitation: `${portal.name}: falha na conexão Google` };
-      }
+        if (!searchRes.ok) { await searchRes.text(); return { portalResult: pr, urls: [] as any[], limitation: searchRes.status === 402 ? "Firecrawl: créditos insuficientes" : `${portal.name}: erro (${searchRes.status})` }; }
+        const results = (await searchRes.json()).data || [];
+        pr.urls_found = results.length;
+        return { portalResult: pr, urls: results.filter((r: any) => r.url).map((r: any) => ({ url: r.url, title: r.title || "", portal, snippet: r.description || "" })), limitation: null as string | null };
+      } catch (err) { return { portalResult: pr, urls: [] as any[], limitation: `${portal.name}: falha` }; }
     }));
+    for (const r of portalSearchResults) { if (r.status === "fulfilled") { portalResults.push(r.value.portalResult); googleUrls.push(...r.value.urls); if (r.value.limitation) limitations.push(r.value.limitation); } }
 
-    for (const result of portalSearchResults) {
-      if (result.status === "fulfilled") {
-        const { portalResult, urls, limitation } = result.value;
-        portalResults.push(portalResult);
-        googleUrls.push(...urls);
-        if (limitation) limitations.push(limitation);
-      }
-    }
-
-    // Merge + dedup + city pre-filter
+    // Merge + dedup + filters
     const seenUrls = new Set<string>();
     const mergedUrlsRaw: Array<{ url: string; title: string; portal: PortalInfo; snippet: string }> = [];
     let cityFilteredCount = 0;
-    const cityFilteredExamples: string[] = [];
     for (const item of [...nativeUrls, ...googleUrls]) {
       const normalized = item.url.replace(/\/$/, "").toLowerCase();
       if (seenUrls.has(normalized)) continue;
       seenUrls.add(normalized);
-
       const studyPurpose = (property.property_purpose || "venda").toLowerCase();
       const urlLower = item.url.toLowerCase();
       const isRentalUrl = /\/(aluguel|alugar|para-alugar)\//i.test(urlLower);
       const isSaleUrl = /\/(venda|comprar|a-venda)\//i.test(urlLower);
-      if (studyPurpose !== "aluguel" && studyPurpose !== "rent" && isRentalUrl && !isSaleUrl) {
-        cityFilteredCount++;
-        if (cityFilteredExamples.length < 5) cityFilteredExamples.push(item.url.substring(0, 100));
-        discardReasons.push({ url: item.url, portal: item.portal.name, reason: "URL de aluguel descartada (estudo é venda)" });
-        continue;
-      }
-      if ((studyPurpose === "aluguel" || studyPurpose === "rent") && isSaleUrl && !isRentalUrl) {
-        cityFilteredCount++;
-        if (cityFilteredExamples.length < 5) cityFilteredExamples.push(item.url.substring(0, 100));
-        discardReasons.push({ url: item.url, portal: item.portal.name, reason: "URL de venda descartada (estudo é aluguel)" });
-        continue;
-      }
-
-      if (isWrongCityUrl(item.url, property.city)) {
-        cityFilteredCount++;
-        if (cityFilteredExamples.length < 5) cityFilteredExamples.push(item.url.substring(0, 100));
-        discardReasons.push({ url: item.url, portal: item.portal.name, reason: "URL pertence a outra cidade (pré-filtro)" });
-        continue;
-      }
-
+      if (studyPurpose !== "aluguel" && studyPurpose !== "rent" && isRentalUrl && !isSaleUrl) { cityFilteredCount++; discardReasons.push({ url: item.url, portal: item.portal.name, reason: "URL de aluguel (estudo é venda)" }); continue; }
+      if ((studyPurpose === "aluguel" || studyPurpose === "rent") && isSaleUrl && !isRentalUrl) { cityFilteredCount++; discardReasons.push({ url: item.url, portal: item.portal.name, reason: "URL de venda (estudo é aluguel)" }); continue; }
+      if (isWrongCityUrl(item.url, property.city)) { cityFilteredCount++; discardReasons.push({ url: item.url, portal: item.portal.name, reason: "Outra cidade" }); continue; }
       mergedUrlsRaw.push(item);
     }
-
-    if (cityFilteredCount > 0) {
-      console.log(`[INNGEST][FASE 1] Pré-filtro removeu ${cityFilteredCount} URLs`);
-    }
+    if (cityFilteredCount > 0) console.log(`[INNGEST][FASE 1] Pré-filtro removeu ${cityFilteredCount} URLs`);
 
     const condoSlug = property.condominium ? slugify(property.condominium) : null;
     const citySlug = property.city ? slugify(property.city) : null;
-
     const mergedUrls = mergedUrlsRaw.sort((a, b) => {
-      const aLower = a.url.toLowerCase();
-      const bLower = b.url.toLowerCase();
-      const aCondoMatch = condoSlug && aLower.includes(condoSlug) ? 1 : 0;
-      const bCondoMatch = condoSlug && bLower.includes(condoSlug) ? 1 : 0;
-      if (aCondoMatch !== bCondoMatch) return bCondoMatch - aCondoMatch;
-      const aCityMatch = citySlug && aLower.includes(citySlug) ? 1 : 0;
-      const bCityMatch = citySlug && bLower.includes(citySlug) ? 1 : 0;
-      return bCityMatch - aCityMatch;
+      const al = a.url.toLowerCase(), bl = b.url.toLowerCase();
+      const ac = condoSlug && al.includes(condoSlug) ? 1 : 0, bc = condoSlug && bl.includes(condoSlug) ? 1 : 0;
+      if (ac !== bc) return bc - ac;
+      const aci = citySlug && al.includes(citySlug) ? 1 : 0, bci = citySlug && bl.includes(citySlug) ? 1 : 0;
+      return bci - aci;
     });
-
-    console.log(`[INNGEST][FASE 1] Total merged: ${mergedUrls.length} URLs únicas`);
-
-    for (const pr of portalResults) {
-      const nativeCount = nativeUrls.filter(u => u.portal.code === pr.portal_code).length;
-      pr.urls_found += nativeCount;
-    }
+    console.log(`[INNGEST][FASE 1] Total: ${mergedUrls.length} URLs únicas`);
+    for (const pr of portalResults) { pr.urls_found += nativeUrls.filter(u => u.portal.code === pr.portal_code).length; }
 
     if (mergedUrls.length === 0) {
       if (marketStudyId) await updateStudyStatus("completed");
-      return {
-        success: true, comparables: [],
-        research_metadata: {
-          portals_checked: portalResults, total_listings_found: 0,
-          listings_opened: 0, listings_discarded: discardReasons.length,
-          discard_reasons: discardReasons, filters_used: filters,
-          collected_at: new Date().toISOString(),
-          limitations: [...limitations, "Nenhum resultado encontrado nos portais"],
-        },
-        pricing_analysis: null,
-      };
+      return { success: true, comparables: [], research_metadata: { portals_checked: portalResults, total_listings_found: 0, listings_opened: 0, listings_discarded: discardReasons.length, discard_reasons: discardReasons, filters_used: filters, collected_at: new Date().toISOString(), limitations: [...limitations, "Nenhum resultado encontrado"] }, pricing_analysis: null };
     }
 
-    // ==========================================
     // FASE 2: Individual validation
-    // ==========================================
-    console.log(`[INNGEST][FASE 2] Abrindo ${mergedUrls.length} URLs individualmente...`);
-
-    const MAX_URLS = 25;
-    const MIN_PER_PORTAL = 3;
+    console.log(`[INNGEST][FASE 2] Abrindo ${mergedUrls.length} URLs...`);
+    const MAX_URLS = 25, MIN_PER_PORTAL_VAL = 3;
     const byPortal = new Map<string, typeof mergedUrls>();
-    for (const item of mergedUrls) {
-      const key = item.portal.code;
-      if (!byPortal.has(key)) byPortal.set(key, []);
-      byPortal.get(key)!.push(item);
-    }
-
-    const selectedUrls = new Set<string>();
+    for (const item of mergedUrls) { const k = item.portal.code; if (!byPortal.has(k)) byPortal.set(k, []); byPortal.get(k)!.push(item); }
+    const selectedUrlsSet = new Set<string>();
     const urlsToProcess: typeof mergedUrls = [];
+    for (const [, items] of byPortal) { for (const item of items.slice(0, MIN_PER_PORTAL_VAL)) { if (urlsToProcess.length >= MAX_URLS) break; urlsToProcess.push(item); selectedUrlsSet.add(item.url); } }
+    for (const item of mergedUrls) { if (urlsToProcess.length >= MAX_URLS) break; if (!selectedUrlsSet.has(item.url)) urlsToProcess.push(item); }
+    if (mergedUrls.length > MAX_URLS) limitations.push(`Limitado a ${MAX_URLS} de ${mergedUrls.length} URLs`);
 
-    for (const [_code, items] of byPortal) {
-      for (const item of items.slice(0, MIN_PER_PORTAL)) {
-        if (urlsToProcess.length >= MAX_URLS) break;
-        urlsToProcess.push(item);
-        selectedUrls.add(item.url);
-      }
-    }
-
-    for (const item of mergedUrls) {
-      if (urlsToProcess.length >= MAX_URLS) break;
-      if (!selectedUrls.has(item.url)) urlsToProcess.push(item);
-    }
-
-    if (mergedUrls.length > MAX_URLS) {
-      limitations.push(`Limitado a ${MAX_URLS} de ${mergedUrls.length} URLs para respeitar timeout`);
-    }
-
-    const scrapedPages: Array<{
-      url: string; portal: PortalInfo; markdown: string; status: "ok" | "failed";
-      isMultiListing?: boolean; isCondoTarget?: boolean;
-    }> = [];
-
+    const scrapedPages: Array<{ url: string; portal: PortalInfo; markdown: string; status: "ok" | "failed"; isMultiListing?: boolean; isCondoTarget?: boolean }> = [];
     let listingsOpened = 0;
     const scrapedUrlSet = new Set<string>();
 
     for (const item of urlsToProcess) {
       try {
-        const isMultiListing = isMultiListingUrl(item.url);
-        console.log(`[INNGEST][FASE 2] Scraping${isMultiListing ? " (multi)" : ""}: ${item.url.substring(0, 80)}...`);
+        const isML = isMultiListingUrl(item.url);
         listingsOpened++;
-
         const pr = portalResults.find(p => p.portal_code === item.portal.code);
         if (pr) pr.urls_opened++;
-
-        const formats = isMultiListing ? ["markdown", "links"] : ["markdown"];
         const isKenlo = /kenlo\.com\.br/i.test(item.url);
-        const scrapeBody: any = {
-          url: item.url, formats, onlyMainContent: true,
-          waitFor: isKenlo ? 10000 : (isMultiListing ? 5000 : 2000),
-        };
-        if (isKenlo) {
-          scrapeBody.actions = [
-            { type: "wait", milliseconds: 8000 },
-            { type: "scroll", direction: "down", amount: 3 },
-            { type: "wait", milliseconds: 2000 },
-          ];
-        }
-
+        const scrapeBody: any = { url: item.url, formats: isML ? ["markdown", "links"] : ["markdown"], onlyMainContent: true, waitFor: isKenlo ? 10000 : (isML ? 5000 : 2000) };
+        if (isKenlo) scrapeBody.actions = [{ type: "wait", milliseconds: 8000 }, { type: "scroll", direction: "down", amount: 3 }, { type: "wait", milliseconds: 2000 }];
         const firecrawlUrl = isKenlo ? "https://api.firecrawl.dev/v2/scrape" : "https://api.firecrawl.dev/v1/scrape";
-        const scrapeRes = await fetchWithRetry(firecrawlUrl, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify(scrapeBody),
-        });
-
-        if (!scrapeRes.ok) {
-          const status = scrapeRes.status;
-          await scrapeRes.text();
-          console.warn(`[INNGEST][FASE 2] Scrape failed: ${status}`);
-          discardReasons.push({ url: item.url, portal: item.portal.name, reason: status === 404 ? "Página não encontrada (404)" : `Erro HTTP ${status}` });
-          continue;
-        }
-
+        const scrapeRes = await fetchWithRetry(firecrawlUrl, { method: "POST", headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify(scrapeBody) });
+        if (!scrapeRes.ok) { await scrapeRes.text(); discardReasons.push({ url: item.url, portal: item.portal.name, reason: `Erro HTTP ${scrapeRes.status}` }); continue; }
         const scrapeData = await scrapeRes.json();
         let markdown = scrapeData.data?.markdown || scrapeData.markdown || "";
         const links: string[] = scrapeData.data?.links || scrapeData.links || [];
 
-        console.log(`[INNGEST][FASE 2] ${item.portal.name} markdown: ${markdown.length} chars`);
-
-        // Google Cache fallback for Kenlo
         if (isKenlo && markdown.length < 1000) {
-          console.log(`[INNGEST][FASE 2] Kenlo page too short, trying Google Cache...`);
           try {
-            const cacheUrl = `https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(item.url)}`;
-            const cacheRes = await fetchWithRetry("https://api.firecrawl.dev/v2/scrape", {
-              method: "POST",
-              headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ url: cacheUrl, formats: ["markdown"], onlyMainContent: true, waitFor: 3000 }),
-            });
-            if (cacheRes.ok) {
-              const cacheData = await cacheRes.json();
-              const cacheMd = cacheData.data?.markdown || cacheData.markdown || "";
-              if (cacheMd.length > markdown.length) markdown = cacheMd;
-            }
-          } catch (cacheErr) {
-            console.warn(`[INNGEST][FASE 2] Google Cache fallback failed`, cacheErr);
-          }
-
+            const cacheRes = await fetchWithRetry("https://api.firecrawl.dev/v2/scrape", { method: "POST", headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ url: `https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(item.url)}`, formats: ["markdown"], onlyMainContent: true, waitFor: 3000 }) });
+            if (cacheRes.ok) { const cacheMd = ((await cacheRes.json()).data?.markdown || ""); if (cacheMd.length > markdown.length) markdown = cacheMd; }
+          } catch {}
           if (markdown.length < 1000 && /\/imovel\//i.test(item.url)) {
-            const slugMatch = item.url.match(/\/imovel\/([^/]+)\/([^/?#]+)/i);
-            if (slugMatch) {
-              const slugParts = slugMatch[1].split("-");
-              const externalId = slugMatch[2];
-              const typeMatch = slugParts[0] || "";
-              const cityMatch = slugParts.find((_, i) => i === 1) || "";
-              const roomsMatch = slugMatch[1].match(/(\d+)-quartos/);
-              const areaMatch = slugMatch[1].match(/(\d+)-m/);
-              const syntheticMd = [
-                `# ${typeMatch} em ${cityMatch}`,
-                roomsMatch ? `- Quartos: ${roomsMatch[1]}` : "",
-                areaMatch ? `- Área: ${areaMatch[1]}m²` : "",
-                `- Código: ${externalId}`,
-                `- Fonte: Kenlo`,
-                `- URL: ${item.url}`,
-              ].filter(Boolean).join("\n");
-              markdown = markdown + "\n\n" + syntheticMd;
-            }
+            const sm = item.url.match(/\/imovel\/([^/]+)\/([^/?#]+)/i);
+            if (sm) { const sp = sm[1].split("-"); markdown += `\n\n# ${sp[0]} em ${sp[1] || ""}\n- Código: ${sm[2]}\n- Fonte: Kenlo\n- URL: ${item.url}`; }
           }
         }
 
-        if (!markdown || markdown.length < 100) {
-          discardReasons.push({ url: item.url, portal: item.portal.name, reason: `Conteúdo insuficiente (${markdown.length} chars)${isKenlo ? ' — SPA' : ''}` });
-          continue;
-        }
+        if (!markdown || markdown.length < 100) { discardReasons.push({ url: item.url, portal: item.portal.name, reason: `Conteúdo insuficiente (${markdown.length} chars)` }); continue; }
+        const lMd = markdown.toLowerCase();
+        if (lMd.includes("anúncio indisponível") || lMd.includes("anúncio expirado") || lMd.includes("imóvel vendido") || lMd.includes("este anúncio não está mais") || lMd.includes("página não encontrada")) { discardReasons.push({ url: item.url, portal: item.portal.name, reason: "Indisponível/expirado" }); continue; }
 
-        const lowerMd = markdown.toLowerCase();
-        if (
-          lowerMd.includes("anúncio indisponível") || lowerMd.includes("anúncio expirado") ||
-          lowerMd.includes("imóvel vendido") || lowerMd.includes("este anúncio não está mais") ||
-          lowerMd.includes("página não encontrada")
-        ) {
-          discardReasons.push({ url: item.url, portal: item.portal.name, reason: "Anúncio indisponível ou expirado" });
-          continue;
-        }
-
-        // Multi-listing handling
-        if (!isIndividualListingUrl(item.url) && (isMultiListing || looksLikeMultiListing(markdown))) {
-          let allIndividualUrls = extractIndividualListingUrls(links, item.portal.code);
-
-          const paginationUrls = generatePaginationUrls(item.url, 4);
-          if (paginationUrls.length > 0) {
-            console.log(`[INNGEST][FASE 2] Paginação: ${paginationUrls.length} páginas`);
-            const paginationResults = await Promise.allSettled(paginationUrls.map(async (pageUrl) => {
-              const normalizedPage = pageUrl.replace(/\/$/, "").toLowerCase();
-              if (scrapedUrlSet.has(normalizedPage)) return [];
-              scrapedUrlSet.add(normalizedPage);
-              try {
-                listingsOpened++;
-                const pageRes = await fetchWithRetry("https://api.firecrawl.dev/v1/scrape", {
-                  method: "POST",
-                  headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
-                  body: JSON.stringify({ url: pageUrl, formats: ["markdown", "links"], onlyMainContent: true, waitFor: 5000 }),
-                });
-                if (!pageRes.ok) { await pageRes.text(); return []; }
-                const pageData = await pageRes.json();
-                const pageLinks: string[] = pageData.data?.links || pageData.links || [];
-                return extractIndividualListingUrls(pageLinks, item.portal.code);
-              } catch { return []; }
+        if (!isIndividualListingUrl(item.url) && (isML || looksLikeMultiListing(markdown))) {
+          let allIndUrls = extractIndividualListingUrls(links, item.portal.code);
+          const pagUrls = generatePaginationUrls(item.url, 4);
+          if (pagUrls.length > 0) {
+            const pagResults = await Promise.allSettled(pagUrls.map(async (pu) => {
+              if (scrapedUrlSet.has(pu.replace(/\/$/, "").toLowerCase())) return [];
+              scrapedUrlSet.add(pu.replace(/\/$/, "").toLowerCase());
+              listingsOpened++;
+              try { const r = await fetchWithRetry("https://api.firecrawl.dev/v1/scrape", { method: "POST", headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ url: pu, formats: ["markdown", "links"], onlyMainContent: true, waitFor: 5000 }) }); if (!r.ok) { await r.text(); return []; } return extractIndividualListingUrls((await r.json()).data?.links || [], item.portal.code); } catch { return []; }
             }));
-            for (const r of paginationResults) {
-              if (r.status === "fulfilled") allIndividualUrls.push(...r.value);
-            }
+            for (const r of pagResults) { if (r.status === "fulfilled") allIndUrls.push(...r.value); }
           }
-
-          allIndividualUrls = [...new Set(allIndividualUrls)];
-          if (allIndividualUrls.length > 0) {
-            console.log(`[INNGEST][FASE 2] Multi-listing → ${allIndividualUrls.length} URLs individuais`);
-            const maxIndividual = 8;
-            for (const iUrl of allIndividualUrls.slice(0, maxIndividual)) {
+          allIndUrls = [...new Set(allIndUrls)];
+          if (allIndUrls.length > 0) {
+            for (const iUrl of allIndUrls.slice(0, 8)) {
               if (scrapedUrlSet.has(iUrl.toLowerCase())) continue;
               scrapedUrlSet.add(iUrl.toLowerCase());
-              try {
-                listingsOpened++;
-                const iRes = await fetchWithRetry("https://api.firecrawl.dev/v1/scrape", {
-                  method: "POST",
-                  headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
-                  body: JSON.stringify({ url: iUrl, formats: ["markdown"], onlyMainContent: true, waitFor: 2000 }),
-                });
-                if (!iRes.ok) { await iRes.text(); continue; }
-                const iData = await iRes.json();
-                const iMd = iData.data?.markdown || iData.markdown || "";
-                if (iMd.length >= 100) {
-                  const isCondoTarget = condoSlug ? iUrl.toLowerCase().includes(condoSlug) : false;
-                  scrapedPages.push({ url: iUrl, portal: item.portal, markdown: iMd, status: "ok", isMultiListing: false, isCondoTarget });
-                }
-              } catch { /* skip */ }
+              listingsOpened++;
+              try { const iRes = await fetchWithRetry("https://api.firecrawl.dev/v1/scrape", { method: "POST", headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ url: iUrl, formats: ["markdown"], onlyMainContent: true, waitFor: 2000 }) }); if (!iRes.ok) { await iRes.text(); continue; } const iMd = (await iRes.json()).data?.markdown || ""; if (iMd.length >= 100) scrapedPages.push({ url: iUrl, portal: item.portal, markdown: iMd, status: "ok", isMultiListing: false, isCondoTarget: condoSlug ? iUrl.toLowerCase().includes(condoSlug) : false }); } catch {}
             }
           }
-
-          // Still add the multi-listing page if it has enough content
-          const isCondoTarget = condoSlug ? item.url.toLowerCase().includes(condoSlug) : false;
-          scrapedPages.push({ url: item.url, portal: item.portal, markdown, status: "ok", isMultiListing: true, isCondoTarget });
+          scrapedPages.push({ url: item.url, portal: item.portal, markdown, status: "ok", isMultiListing: true, isCondoTarget: condoSlug ? item.url.toLowerCase().includes(condoSlug) : false });
         } else {
-          const isCondoTarget = condoSlug ? item.url.toLowerCase().includes(condoSlug) : false;
-          scrapedPages.push({ url: item.url, portal: item.portal, markdown, status: "ok", isMultiListing: false, isCondoTarget });
+          scrapedPages.push({ url: item.url, portal: item.portal, markdown, status: "ok", isMultiListing: false, isCondoTarget: condoSlug ? item.url.toLowerCase().includes(condoSlug) : false });
         }
-      } catch (err) {
-        console.error(`[INNGEST][FASE 2] Exception for ${item.url}:`, err);
-        discardReasons.push({ url: item.url, portal: item.portal.name, reason: "Erro interno ao processar" });
-      }
+      } catch (err) { discardReasons.push({ url: item.url, portal: item.portal.name, reason: "Erro interno" }); }
     }
 
     console.log(`[INNGEST][FASE 2] ${scrapedPages.length} páginas válidas de ${listingsOpened} abertas`);
-
     if (scrapedPages.length === 0) {
       if (marketStudyId) await updateStudyStatus("completed");
-      return {
-        success: true, comparables: [],
-        research_metadata: {
-          portals_checked: portalResults, total_listings_found: mergedUrls.length,
-          listings_opened: listingsOpened, listings_discarded: discardReasons.length,
-          discard_reasons: discardReasons, filters_used: filters,
-          collected_at: new Date().toISOString(),
-          limitations: [...limitations, "Nenhuma página válida após validação individual"],
-        },
-        pricing_analysis: null,
-      };
+      return { success: true, comparables: [], research_metadata: { portals_checked: portalResults, total_listings_found: mergedUrls.length, listings_opened: listingsOpened, listings_discarded: discardReasons.length, discard_reasons: discardReasons, filters_used: filters, collected_at: new Date().toISOString(), limitations: [...limitations, "Nenhuma página válida"] }, pricing_analysis: null };
     }
 
-    // ==========================================
     // FASE 3: AI extraction
-    // ==========================================
     const MAX_AI_PAGES = 20;
     let pagesToAI = scrapedPages;
     if (scrapedPages.length > MAX_AI_PAGES) {
-      pagesToAI = [
-        ...scrapedPages.filter(p => p.isCondoTarget),
-        ...scrapedPages.filter(p => !p.isCondoTarget && !p.isMultiListing),
-        ...scrapedPages.filter(p => !p.isCondoTarget && p.isMultiListing),
-      ].slice(0, MAX_AI_PAGES);
-      limitations.push(`Limitado a ${MAX_AI_PAGES} de ${scrapedPages.length} páginas para extração por IA`);
+      pagesToAI = [...scrapedPages.filter(p => p.isCondoTarget), ...scrapedPages.filter(p => !p.isCondoTarget && !p.isMultiListing), ...scrapedPages.filter(p => !p.isCondoTarget && p.isMultiListing)].slice(0, MAX_AI_PAGES);
+      limitations.push(`Limitado a ${MAX_AI_PAGES} de ${scrapedPages.length} páginas para IA`);
     }
+    console.log(`[INNGEST][FASE 3] Extraindo de ${pagesToAI.length} páginas...`);
 
-    console.log(`[INNGEST][FASE 3] Extraindo dados de ${pagesToAI.length} páginas com IA...`);
+    const hasML = pagesToAI.some(p => p.isMultiListing);
+    const combined = pagesToAI.map((p, i) => `--- ${p.isMultiListing ? "LISTAGEM MÚLTIPLA" : "Anúncio"} ${i + 1} (Portal: ${p.portal.name}, URL: ${p.url}) ---\n${p.markdown}`).join("\n\n");
+    const mlInst = hasML ? `\n\nATENÇÃO - LISTAGENS MÚLTIPLAS: Blocos "LISTAGEM MÚLTIPLA" contêm VÁRIOS imóveis. Extraia CADA um individualmente com URL e external_id únicos.` : "";
 
-    const hasMultiListingPages = pagesToAI.some((p) => p.isMultiListing);
+    const sysPrompt = `Você é um perito avaliador imobiliário brasileiro. Extraia dados estruturados de CADA anúncio.
 
-    const combinedContent = pagesToAI
-      .map((p, i) => {
-        const label = p.isMultiListing
-          ? `--- LISTAGEM MÚLTIPLA ${i + 1} (Portal: ${p.portal.name}, URL: ${p.url}) ---`
-          : `--- Anúncio ${i + 1} (Portal: ${p.portal.name}, URL: ${p.url}) ---`;
-        return `${label}\n${p.markdown}`;
-      })
-      .join("\n\n");
+REGRAS: Extraia EXATAMENTE os dados presentes. Preços "R$ 1.200.000" → 1200000. Áreas "120 m²" → 120.${mlInst}
 
-    const multiListingInstructions = hasMultiListingPages
-      ? `\n\nATENÇÃO - LISTAGENS MÚLTIPLAS:
-- Blocos marcados "--- LISTAGEM MÚLTIPLA ---" contêm VÁRIOS imóveis numa mesma página (ex: página de condomínio).
-- Extraia CADA imóvel individualmente como um comparável separado.
-- Para cada imóvel, extraia o URL INDIVIDUAL do anúncio. NÃO use a URL da página de busca para todos.
-- Extraia o external_id (código do anúncio no portal) de cada card.
-- Se não conseguir encontrar o URL individual, use a URL da página MAS inclua o external_id obrigatoriamente.
-- NÃO trate a página inteira como um único imóvel.`
-      : "";
-
-    const systemPrompt = `Você é um perito avaliador imobiliário brasileiro. Analise CADA anúncio individualmente e extraia dados estruturados.
-
-REGRAS CRÍTICAS:
-- Cada bloco "--- Anúncio X ---" é UM anúncio individual já validado.${multiListingInstructions}
-- Extraia EXATAMENTE os dados que estão no anúncio. NÃO invente dados.
-- Se um dado não está claro, use null/0.
-- Preços "R$ 1.200.000" → 1200000. Áreas "120 m²" → 120.
-- Inclua o URL INDIVIDUAL do anúncio no campo source_url.
-- Inclua o nome do portal no campo source_name.
-- Inclua o código/ID do anúncio no campo external_id.
-
-IMÓVEL DE REFERÊNCIA:
-- Tipo: ${property.property_type || "Não informado"}
-- Bairro: ${property.neighborhood || "Não informado"}
-- Cidade: ${property.city || "Não informado"}
-- Condomínio: ${property.condominium || "Não informado"}
-- Área: ${property.area_total || property.area_built || "Não informada"} m²
-- Quartos: ${property.bedrooms || "Não informado"}
-- Suítes: ${property.suites || "Não informado"}
-- Vagas: ${property.parking_spots || "Não informado"}
-- Padrão: ${property.property_standard || "Não informado"}
-- Preço esperado: ${property.owner_expected_price ? "R$ " + Number(property.owner_expected_price).toLocaleString("pt-BR") : "Não informado"}
-
-IMPORTANTE: Extraia TODOS os diferenciais e comodidades. Extraia listing_date quando disponível (YYYY-MM-DD).`;
+IMÓVEL DE REFERÊNCIA: Tipo: ${property.property_type || "?"}, Bairro: ${property.neighborhood || "?"}, Cidade: ${property.city || "?"}, Cond: ${property.condominium || "?"}, Área: ${property.area_total || property.area_built || "?"} m², Quartos: ${property.bedrooms || "?"}, Suítes: ${property.suites || "?"}, Vagas: ${property.parking_spots || "?"}, Padrão: ${property.property_standard || "?"}, Preço: ${property.owner_expected_price ? "R$ " + Number(property.owner_expected_price).toLocaleString("pt-BR") : "?"}`;
 
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      method: "POST", headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Extraia os dados de cada anúncio:\n\n${combinedContent}` },
-        ],
-        tools: [{
-          type: "function",
-          function: {
-            name: "extract_comparables",
-            description: "Extrair dados estruturados de cada anúncio",
-            parameters: {
-              type: "object",
-              properties: {
-                comparables: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      title: { type: "string" }, price: { type: "number" }, area: { type: "number" },
-                      bedrooms: { type: "number" }, suites: { type: "number" }, parking_spots: { type: "number" },
-                      address: { type: "string" }, neighborhood: { type: "string" }, city: { type: "string" },
-                      condominium: { type: "string" }, construction_standard: { type: "string" },
-                      property_type: { type: "string" }, source_url: { type: "string" }, source_name: { type: "string" },
-                      advertiser: { type: "string" }, differentials: { type: "array", items: { type: "string" } },
-                      description_summary: { type: "string" }, listing_date: { type: "string" },
-                      external_id: { type: "string" },
-                    },
-                    required: ["title", "price", "area", "source_url", "source_name"],
-                  },
-                },
-              },
-              required: ["comparables"],
-            },
-          },
-        }],
+        messages: [{ role: "system", content: sysPrompt }, { role: "user", content: `Extraia:\n\n${combined}` }],
+        tools: [{ type: "function", function: { name: "extract_comparables", description: "Extrair comparáveis", parameters: { type: "object", properties: { comparables: { type: "array", items: { type: "object", properties: { title: { type: "string" }, price: { type: "number" }, area: { type: "number" }, bedrooms: { type: "number" }, suites: { type: "number" }, parking_spots: { type: "number" }, address: { type: "string" }, neighborhood: { type: "string" }, city: { type: "string" }, condominium: { type: "string" }, construction_standard: { type: "string" }, property_type: { type: "string" }, source_url: { type: "string" }, source_name: { type: "string" }, advertiser: { type: "string" }, differentials: { type: "array", items: { type: "string" } }, description_summary: { type: "string" }, listing_date: { type: "string" }, external_id: { type: "string" } }, required: ["title", "price", "area", "source_url", "source_name"] } } }, required: ["comparables"] } } }],
         tool_choice: { type: "function", function: { name: "extract_comparables" } },
       }),
     });
 
-    if (!aiRes.ok) {
-      const aiErr = await aiRes.text();
-      console.error(`[INNGEST][FASE 3] AI error: ${aiRes.status} ${aiErr}`);
-      if (marketStudyId) await updateStudyStatus("failed");
-      return { success: false, error: aiRes.status === 429 ? "Rate limit exceeded" : aiRes.status === 402 ? "AI credits exhausted" : "AI extraction failed" };
-    }
+    if (!aiRes.ok) { const e = await aiRes.text(); console.error(`[INNGEST][FASE 3] AI error: ${aiRes.status}`); if (marketStudyId) await updateStudyStatus("failed"); return { success: false, error: "AI extraction failed" }; }
 
-    const aiData = await aiRes.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) {
-      console.error("[INNGEST][FASE 3] No tool call in AI response");
-      if (marketStudyId) await updateStudyStatus("completed");
-      return {
-        success: true, comparables: [],
-        research_metadata: {
-          portals_checked: portalResults, total_listings_found: mergedUrls.length,
-          listings_opened: listingsOpened, listings_discarded: discardReasons.length,
-          discard_reasons: discardReasons, filters_used: filters,
-          collected_at: new Date().toISOString(),
-          limitations: [...limitations, "IA não conseguiu extrair dados estruturados"],
-        },
-        pricing_analysis: null,
-      };
-    }
+    const tc = (await aiRes.json()).choices?.[0]?.message?.tool_calls?.[0];
+    if (!tc) { if (marketStudyId) await updateStudyStatus("completed"); return { success: true, comparables: [], research_metadata: { portals_checked: portalResults, total_listings_found: mergedUrls.length, listings_opened: listingsOpened, listings_discarded: discardReasons.length, discard_reasons: discardReasons, filters_used: filters, collected_at: new Date().toISOString(), limitations: [...limitations, "IA sem dados"] }, pricing_analysis: null }; }
 
     let extracted: { comparables: any[] };
-    try {
-      extracted = JSON.parse(toolCall.function.arguments);
-      console.log(`[INNGEST][FASE 3] AI extraiu ${extracted.comparables?.length || 0} comparáveis`);
-    } catch {
-      console.error("[INNGEST][FASE 3] Failed to parse AI response");
-      if (marketStudyId) await updateStudyStatus("completed");
-      return {
-        success: true, comparables: [],
-        research_metadata: {
-          portals_checked: portalResults, total_listings_found: mergedUrls.length,
-          listings_opened: listingsOpened, listings_discarded: discardReasons.length,
-          discard_reasons: discardReasons, filters_used: filters,
-          collected_at: new Date().toISOString(), limitations: [...limitations, "Erro ao processar resposta da IA"],
-        },
-        pricing_analysis: null,
-      };
-    }
+    try { extracted = JSON.parse(tc.function.arguments); console.log(`[INNGEST][FASE 3] AI extraiu ${extracted.comparables?.length || 0} comparáveis`); }
+    catch { if (marketStudyId) await updateStudyStatus("completed"); return { success: true, comparables: [], research_metadata: { portals_checked: portalResults, total_listings_found: mergedUrls.length, listings_opened: listingsOpened, listings_discarded: discardReasons.length, discard_reasons: discardReasons, filters_used: filters, collected_at: new Date().toISOString(), limitations: [...limitations, "Erro parse IA"] }, pricing_analysis: null }; }
 
-    // URL Fallback + forced portal attribution
-    const searchUrlPatterns = [
-      /vivareal\.com\.br\/venda\//, /vivareal\.com\.br\/aluguel\//, /vivareal\.com\.br\/condominio\//,
-      /zapimoveis\.com\.br\/venda\//, /zapimoveis\.com\.br\/aluguel\//, /zapimoveis\.com\.br\/condominio\//,
-      /imovelweb\.com\.br\/(apartamentos|casas|imoveis)-/, /olx\.com\.br\/imoveis\//,
-    ];
-    const individualUrlPatterns = [
-      /vivareal\.com\.br\/imovel\//, /zapimoveis\.com\.br\/imovel\//,
-      /imovelweb\.com\.br\/propriedades\//, /olx\.com\.br\/d\/anuncio\//, /kenlo\.com\.br\/imovel\//,
-    ];
-
+    // URL fix + portal attribution
+    const searchPats = [/vivareal\.com\.br\/venda\//, /vivareal\.com\.br\/aluguel\//, /vivareal\.com\.br\/condominio\//, /zapimoveis\.com\.br\/venda\//, /zapimoveis\.com\.br\/aluguel\//, /zapimoveis\.com\.br\/condominio\//, /imovelweb\.com\.br\/(apartamentos|casas|imoveis)-/, /olx\.com\.br\/imoveis\//];
+    const indPats = [/vivareal\.com\.br\/imovel\//, /zapimoveis\.com\.br\/imovel\//, /imovelweb\.com\.br\/propriedades\//, /olx\.com\.br\/d\/anuncio\//, /kenlo\.com\.br\/imovel\//];
     for (const c of (extracted.comparables || [])) {
-      const url = c.source_url || "";
-      const isGenericUrl = searchUrlPatterns.some(p => p.test(url)) && !individualUrlPatterns.some(p => p.test(url));
-      if (isGenericUrl && c.external_id) {
+      const u = c.source_url || "";
+      if (searchPats.some(p => p.test(u)) && !indPats.some(p => p.test(u)) && c.external_id) {
         const eid = c.external_id.replace(/^id-/, "");
-        const portalName = (c.source_name || "").toLowerCase();
-        if (portalName.includes("viva") || portalName.includes("vivareal")) c.source_url = `https://www.vivareal.com.br/imovel/${c.external_id}`;
-        else if (portalName.includes("zap")) c.source_url = `https://www.zapimoveis.com.br/imovel/${c.external_id}`;
-        else if (portalName.includes("imóvel web") || portalName.includes("imovelweb") || portalName.includes("imoveweb")) c.source_url = `https://www.imovelweb.com.br/propriedades/${eid}`;
+        const pn = (c.source_name || "").toLowerCase();
+        if (pn.includes("viva")) c.source_url = `https://www.vivareal.com.br/imovel/${c.external_id}`;
+        else if (pn.includes("zap")) c.source_url = `https://www.zapimoveis.com.br/imovel/${c.external_id}`;
+        else if (pn.includes("imóvel web") || pn.includes("imovelweb")) c.source_url = `https://www.imovelweb.com.br/propriedades/${eid}`;
       }
+      const su = (c.source_url || "").toLowerCase();
+      if (/kenlo\.com\.br/i.test(su)) c.source_name = "Kenlo";
+      else if (/vivareal\.com\.br/i.test(su)) c.source_name = "Viva Real";
+      else if (/zapimoveis\.com\.br/i.test(su)) c.source_name = "ZAP Imóveis";
+      else if (/imovelweb\.com\.br/i.test(su)) c.source_name = "Imóvel Web";
+      else if (/olx\.com\.br/i.test(su)) c.source_name = "OLX";
+      else if (/chavesnamao\.com\.br/i.test(su)) c.source_name = "Chaves na Mão";
     }
 
-    for (const c of (extracted.comparables || [])) {
-      const srcUrl = (c.source_url || "").toLowerCase();
-      if (/kenlo\.com\.br/i.test(srcUrl)) c.source_name = "Kenlo";
-      else if (/vivareal\.com\.br/i.test(srcUrl)) c.source_name = "Viva Real";
-      else if (/zapimoveis\.com\.br/i.test(srcUrl)) c.source_name = "ZAP Imóveis";
-      else if (/imovelweb\.com\.br/i.test(srcUrl)) c.source_name = "Imóvel Web";
-      else if (/olx\.com\.br/i.test(srcUrl)) c.source_name = "OLX";
-      else if (/chavesnamao\.com\.br/i.test(srcUrl)) c.source_name = "Chaves na Mão";
-    }
-
-    // Filter, score, deduplicate
+    // Score + filter
     const baseArea = Number(property.area_total || property.area_built || property.area_land) || 100;
-    const baseBedrooms = Number(property.bedrooms) || 3;
-    const baseSuites = Number(property.suites) || 0;
-    const baseParking = Number(property.parking_spots) || 0;
-
+    const baseBed = Number(property.bedrooms) || 3, baseSu = Number(property.suites) || 0, basePk = Number(property.parking_spots) || 0;
     const validComparables: any[] = [];
-    const maxAgeMonths = Number(filters.maxListingAgeMonths) || 0;
-    const cutoffDate = maxAgeMonths > 0 ? new Date(Date.now() - maxAgeMonths * 30 * 24 * 60 * 60 * 1000) : null;
-    const studyPurposeFinal = (property.property_purpose || "venda").toLowerCase();
-    const isStudySale = studyPurposeFinal !== "aluguel" && studyPurposeFinal !== "rent";
+    const maxAge = Number(filters.maxListingAgeMonths) || 0;
+    const cutoff = maxAge > 0 ? new Date(Date.now() - maxAge * 30 * 24 * 60 * 60 * 1000) : null;
+    const spf = (property.property_purpose || "venda").toLowerCase();
+    const isSale = spf !== "aluguel" && spf !== "rent";
 
     for (const c of (extracted.comparables || [])) {
-      if (!c.price || c.price <= 0 || !c.area || c.area <= 0) {
-        discardReasons.push({ url: c.source_url || "unknown", portal: c.source_name || "unknown", reason: "Preço ou área não disponível" });
-        continue;
-      }
+      if (!c.price || c.price <= 0 || !c.area || c.area <= 0) { discardReasons.push({ url: c.source_url || "?", portal: c.source_name || "?", reason: "Sem preço/área" }); continue; }
+      const tl = (c.title || "").toLowerCase();
+      if (isSale && /alugu[e]?[lr]|para alugar|locação/i.test(tl) && !/venda|comprar/i.test(tl)) { discardReasons.push({ url: c.source_url || "?", portal: c.source_name || "?", reason: "Aluguel vs venda" }); continue; }
+      if (!isSale && /venda|comprar|à venda/i.test(tl) && !/alugu/i.test(tl)) { discardReasons.push({ url: c.source_url || "?", portal: c.source_name || "?", reason: "Venda vs aluguel" }); continue; }
+      if (isSale && c.price < 10000) { discardReasons.push({ url: c.source_url || "?", portal: c.source_name || "?", reason: "Preço baixo (aluguel?)" }); continue; }
+      if (!isSale && c.price > 100000) { discardReasons.push({ url: c.source_url || "?", portal: c.source_name || "?", reason: "Preço alto (venda?)" }); continue; }
+      if (cutoff && c.listing_date) { const ld = new Date(c.listing_date); if (!isNaN(ld.getTime()) && ld < cutoff) { discardReasons.push({ url: c.source_url || "?", portal: c.source_name || "?", reason: "Antigo" }); continue; } }
+      if (isDuplicate(c, validComparables)) { discardReasons.push({ url: c.source_url || "?", portal: c.source_name || "?", reason: "Duplicata" }); continue; }
 
-      const titleLower = (c.title || "").toLowerCase();
-      const isRentalTitle = /alugu[e]?[lr]|para alugar|locação/i.test(titleLower);
-      const isSaleTitle = /venda|comprar|à venda|a venda/i.test(titleLower);
-      if (isStudySale && isRentalTitle && !isSaleTitle) {
-        discardReasons.push({ url: c.source_url || "unknown", portal: c.source_name || "unknown", reason: "Comparável é aluguel (título), estudo é venda" });
-        continue;
-      }
-      if (!isStudySale && isSaleTitle && !isRentalTitle) {
-        discardReasons.push({ url: c.source_url || "unknown", portal: c.source_name || "unknown", reason: "Comparável é venda (título), estudo é aluguel" });
-        continue;
-      }
-
-      if (isStudySale && c.price < 10000) {
-        discardReasons.push({ url: c.source_url || "unknown", portal: c.source_name || "unknown", reason: `Preço R$ ${c.price.toLocaleString("pt-BR")} muito baixo para venda` });
-        continue;
-      }
-      if (!isStudySale && c.price > 100000) {
-        discardReasons.push({ url: c.source_url || "unknown", portal: c.source_name || "unknown", reason: `Preço R$ ${c.price.toLocaleString("pt-BR")} muito alto para aluguel` });
-        continue;
-      }
-
-      if (cutoffDate && c.listing_date) {
-        const listingDate = new Date(c.listing_date);
-        if (!isNaN(listingDate.getTime()) && listingDate < cutoffDate) {
-          const ageMonths = Math.round((Date.now() - listingDate.getTime()) / (30 * 24 * 60 * 60 * 1000));
-          discardReasons.push({ url: c.source_url || "unknown", portal: c.source_name || "unknown", reason: `Anúncio muito antigo (${ageMonths} meses)` });
-          continue;
-        }
-      }
-
-      if (isDuplicate(c, validComparables)) {
-        discardReasons.push({ url: c.source_url || "unknown", portal: c.source_name || "unknown", reason: "Duplicata" });
-        continue;
-      }
-
-      const priceSqm = Math.round(c.price / c.area);
-      const compCondo = (c.condominium || "").toLowerCase();
-      const subjCondo = (property.condominium || "").toLowerCase();
-      const isSameCondo = subjCondo && compCondo && (compCondo.includes(subjCondo) || subjCondo.includes(compCondo));
-
+      const psqm = Math.round(c.price / c.area);
+      const cc = (c.condominium || "").toLowerCase(), sc = (property.condominium || "").toLowerCase();
+      const sameCondo = sc && cc && (cc.includes(sc) || sc.includes(cc));
       let score = 0;
-      if (isSameCondo) score += 25;
-      if (c.neighborhood && property.neighborhood) {
-        const compNeigh = c.neighborhood.toLowerCase();
-        const subjNeigh = property.neighborhood.toLowerCase();
-        if (compNeigh.includes(subjNeigh) || subjNeigh.includes(compNeigh)) score += 20;
-      }
+      if (sameCondo) score += 25;
+      if (c.neighborhood && property.neighborhood) { const cn = c.neighborhood.toLowerCase(), sn = property.neighborhood.toLowerCase(); if (cn.includes(sn) || sn.includes(cn)) score += 20; }
       if (c.property_type && property.property_type && c.property_type.toLowerCase().includes(property.property_type.toLowerCase())) score += 15;
-
-      const areaDiff = Math.abs(c.area - baseArea) / baseArea;
-      if (areaDiff <= 0.05) score += 15;
-      else if (areaDiff <= 0.10) score += 12;
-      else if (areaDiff <= 0.20) score += 8;
-      else if (areaDiff <= 0.30) score += 3;
-
-      const bedroomDiff = Math.abs((c.bedrooms || 0) - baseBedrooms);
-      const suiteDiff = Math.abs((c.suites || 0) - baseSuites);
-      const parkingDiff = Math.abs((c.parking_spots || 0) - baseParking);
-      const roomsAvg = [bedroomDiff, suiteDiff, parkingDiff].filter(d => d >= 0);
-      const avgDiff = roomsAvg.reduce((a, b) => a + b, 0) / roomsAvg.length;
-      if (avgDiff === 0) score += 10;
-      else if (avgDiff <= 1) score += 6;
-      else if (avgDiff <= 2) score += 2;
-
-      const subjStandard = ((property as any).construction_standard || (property as any).property_standard || "").toLowerCase();
-      if (c.construction_standard && subjStandard && (c.construction_standard.toLowerCase().includes(subjStandard) || subjStandard.includes(c.construction_standard.toLowerCase()))) score += 10;
-
-      const subjectDiffs: string[] = (property as any).differentials || [];
-      const compDiffs: string[] = c.differentials || [];
-      if (subjectDiffs.length > 0 && compDiffs.length > 0) {
-        const subNorm = subjectDiffs.map((d: string) => d.toLowerCase());
-        const compNorm = compDiffs.map((d: string) => d.toLowerCase());
-        const overlap = subNorm.filter((d: string) => compNorm.some((cd: string) => cd.includes(d) || d.includes(cd)));
-        const ratio = overlap.length / subNorm.length;
-        if (ratio >= 0.5) score += 5;
-        else if (ratio >= 0.25) score += 3;
-      }
-
-      if (c.city && property.city) {
-        const compCity = c.city.toLowerCase();
-        const subjCity = property.city.toLowerCase();
-        if (compCity.includes(subjCity) || subjCity.includes(compCity)) score += 5;
-      }
-
-      const similarity = Math.min(100, Math.round(score));
-      const minSimilarity = (filters?.preferSameCondominium && property.condominium) ? 25 : 40;
-      if (similarity < minSimilarity) {
-        discardReasons.push({ url: c.source_url || "unknown", portal: c.source_name || "unknown", reason: `Similaridade muito baixa (${similarity}/100)` });
-        continue;
-      }
-
+      const ad = Math.abs(c.area - baseArea) / baseArea;
+      if (ad <= 0.05) score += 15; else if (ad <= 0.10) score += 12; else if (ad <= 0.20) score += 8; else if (ad <= 0.30) score += 3;
+      const bd = Math.abs((c.bedrooms || 0) - baseBed), sd = Math.abs((c.suites || 0) - baseSu), pd = Math.abs((c.parking_spots || 0) - basePk);
+      const avg = (bd + sd + pd) / 3;
+      if (avg === 0) score += 10; else if (avg <= 1) score += 6; else if (avg <= 2) score += 2;
+      const ss = ((property as any).construction_standard || (property as any).property_standard || "").toLowerCase();
+      if (c.construction_standard && ss && (c.construction_standard.toLowerCase().includes(ss) || ss.includes(c.construction_standard.toLowerCase()))) score += 10;
+      const subD: string[] = (property as any).differentials || [], compD: string[] = c.differentials || [];
+      if (subD.length > 0 && compD.length > 0) { const sn2 = subD.map(d => d.toLowerCase()), cn2 = compD.map(d => d.toLowerCase()); const ol = sn2.filter(d => cn2.some(cd => cd.includes(d) || d.includes(cd))); const r = ol.length / sn2.length; if (r >= 0.5) score += 5; else if (r >= 0.25) score += 3; }
+      if (c.city && property.city) { if (c.city.toLowerCase().includes(property.city.toLowerCase()) || property.city.toLowerCase().includes(c.city.toLowerCase())) score += 5; }
+      const sim = Math.min(100, Math.round(score));
+      const minSim = (filters?.preferSameCondominium && property.condominium) ? 25 : 40;
+      if (sim < minSim) { discardReasons.push({ url: c.source_url || "?", portal: c.source_name || "?", reason: `Similaridade ${sim}/100` }); continue; }
       const pr2 = portalResults.find(p => p.portal_name === c.source_name || p.portal_code === c.source_name?.toLowerCase());
       if (pr2) pr2.urls_valid++;
-
-      validComparables.push({
-        title: c.title, price: c.price, area: c.area, price_per_sqm: priceSqm,
-        bedrooms: c.bedrooms || 0, suites: c.suites || 0, parking_spots: c.parking_spots || 0,
-        address: c.address || "", neighborhood: c.neighborhood || "",
-        city: c.city || property.city || "", condominium: c.condominium || "",
-        construction_standard: c.construction_standard || "", property_type: c.property_type || "",
-        source_url: c.source_url || "", source_name: c.source_name || "",
-        similarity_score: similarity, is_approved: true,
-        raw_data: { advertiser: c.advertiser || null, differentials: c.differentials || [], description_summary: c.description_summary || "", validated_individually: true },
-      });
+      validComparables.push({ title: c.title, price: c.price, area: c.area, price_per_sqm: psqm, bedrooms: c.bedrooms || 0, suites: c.suites || 0, parking_spots: c.parking_spots || 0, address: c.address || "", neighborhood: c.neighborhood || "", city: c.city || property.city || "", condominium: c.condominium || "", construction_standard: c.construction_standard || "", property_type: c.property_type || "", source_url: c.source_url || "", source_name: c.source_name || "", similarity_score: sim, is_approved: true, raw_data: { advertiser: c.advertiser || null, differentials: c.differentials || [], description_summary: c.description_summary || "", validated_individually: true } });
     }
 
     validComparables.sort((a, b) => b.similarity_score - a.similarity_score);
     const finalComparables = validComparables.slice(0, maxResults);
+    console.log(`[INNGEST][FASE 3] ${finalComparables.length} comparáveis finais`);
 
-    console.log(`[INNGEST][FASE 3] ${finalComparables.length} comparáveis válidos finais`);
-
-    // Pricing analysis
+    // Pricing
     let pricingAnalysis = null;
     if (finalComparables.length > 0) {
-      const prices = finalComparables.map((c: any) => c.price);
-      const pricesSqm = finalComparables.map((c: any) => c.price_per_sqm);
+      const prices = finalComparables.map((c: any) => c.price), psqms = finalComparables.map((c: any) => c.price_per_sqm);
       const sorted = [...prices].sort((a: number, b: number) => a - b);
-      const avg = Math.round(prices.reduce((a: number, b: number) => a + b, 0) / prices.length);
-      const median = sorted.length % 2 === 0
-        ? Math.round((sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2)
-        : sorted[Math.floor(sorted.length / 2)];
-      const avgSqm = Math.round(pricesSqm.reduce((a: number, b: number) => a + b, 0) / pricesSqm.length);
-      pricingAnalysis = {
-        avg_price: avg, median_price: median, avg_price_per_sqm: avgSqm,
-        price_range_min: sorted[0], price_range_max: sorted[sorted.length - 1],
-        suggested_ad_price: Math.round(median * 1.10),
-        suggested_market_price: Math.round(median * 1.0),
-        suggested_fast_sale_price: Math.round(median * 0.90),
-      };
+      const av = Math.round(prices.reduce((a: number, b: number) => a + b, 0) / prices.length);
+      const med = sorted.length % 2 === 0 ? Math.round((sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2) : sorted[Math.floor(sorted.length / 2)];
+      const aSqm = Math.round(psqms.reduce((a: number, b: number) => a + b, 0) / psqms.length);
+      pricingAnalysis = { avg_price: av, median_price: med, avg_price_per_sqm: aSqm, price_range_min: sorted[0], price_range_max: sorted[sorted.length - 1], suggested_ad_price: Math.round(med * 1.10), suggested_market_price: Math.round(med * 1.0), suggested_fast_sale_price: Math.round(med * 0.90) };
     }
 
-    const researchMetadata = {
-      portals_checked: portalResults, total_listings_found: mergedUrls.length,
-      listings_opened: listingsOpened, listings_discarded: discardReasons.length,
-      discard_reasons: discardReasons, filters_used: filters,
-      collected_at: new Date().toISOString(), limitations,
-    };
+    const resMeta = { portals_checked: portalResults, total_listings_found: mergedUrls.length, listings_opened: listingsOpened, listings_discarded: discardReasons.length, discard_reasons: discardReasons, filters_used: filters, collected_at: new Date().toISOString(), limitations };
+    console.log(`[INNGEST][RESULTADO] ${finalComparables.length} comp, ${listingsOpened} abertos, ${discardReasons.length} desc`);
 
-    console.log(`[INNGEST][RESULTADO] ${finalComparables.length} comparáveis, ${listingsOpened} links abertos, ${discardReasons.length} descartados`);
-
-    // === Save to DB ===
+    // Save to DB
     if (marketStudyId && finalComparables.length > 0) {
-      console.log(`[INNGEST][DB] Inserindo ${finalComparables.length} comparáveis...`);
+      const { data: subProps } = await supabase.from("market_study_subject_properties").select("*").eq("market_study_id", marketStudyId).limit(1);
+      const subProp = subProps?.[0] || null;
+      const studyComps = finalComparables.map((c: any) => ({ market_study_id: marketStudyId, title: c.title || null, address: c.address || null, neighborhood: c.neighborhood || null, city: c.city || null, condominium: c.condominium || null, property_type: c.property_type || null, price: c.price || null, area: c.area || null, price_per_sqm: c.price_per_sqm || null, bedrooms: c.bedrooms || null, suites: c.suites || null, parking_spots: c.parking_spots || null, construction_standard: c.construction_standard || null, similarity_score: c.similarity_score || 0, source_name: c.source_name || null, source_url: c.source_url || null, is_approved: true, origin: "auto_firecrawl", raw_data: c.raw_data || null }));
+      const { data: insComps, error: insErr } = await supabase.from("market_study_comparables").insert(studyComps).select();
+      if (insErr) console.error("[INNGEST][DB] Insert error:", insErr.message);
+      else console.log(`[INNGEST][DB] ${insComps?.length || 0} inseridos`);
 
-      const { data: subjectProps } = await supabase
-        .from("market_study_subject_properties").select("*").eq("market_study_id", marketStudyId).limit(1);
-      const subjectProp = subjectProps?.[0] || null;
-
-      const studyComparables = finalComparables.map((c: any) => ({
-        market_study_id: marketStudyId, title: c.title || null, address: c.address || null,
-        neighborhood: c.neighborhood || null, city: c.city || null, condominium: c.condominium || null,
-        property_type: c.property_type || null, price: c.price || null, area: c.area || null,
-        price_per_sqm: c.price_per_sqm || null, bedrooms: c.bedrooms || null, suites: c.suites || null,
-        parking_spots: c.parking_spots || null, construction_standard: c.construction_standard || null,
-        similarity_score: c.similarity_score || 0, source_name: c.source_name || null,
-        source_url: c.source_url || null, is_approved: true, origin: "auto_firecrawl", raw_data: c.raw_data || null,
-      }));
-
-      const { data: insertedComps, error: insertErr } = await supabase
-        .from("market_study_comparables").insert(studyComparables).select();
-
-      if (insertErr) {
-        console.error("[INNGEST][DB] Insert error:", insertErr.message);
-      } else {
-        console.log(`[INNGEST][DB] ${insertedComps?.length || 0} comparáveis inseridos`);
-      }
-
-      // Calculate adjustments
-      if (insertedComps && insertedComps.length > 0 && subjectProp) {
-        const allAdjustments: any[] = [];
-        const adjustedPrices: { id: string; adjusted_price: number }[] = [];
-
-        for (const comp of insertedComps) {
+      if (insComps && insComps.length > 0 && subProp) {
+        const allAdj: any[] = [], adjPrices: { id: string; adjusted_price: number }[] = [];
+        for (const comp of insComps) {
           const price = comp.price ?? 0;
           if (price <= 0) continue;
-          const adjustments: any[] = [];
-
-          // Suites
-          const subSuites = subjectProp.suites ?? 0;
-          const compSuites = comp.suites ?? 0;
-          if (subSuites !== compSuites) {
-            const diff = compSuites - subSuites;
-            const pct = 2 * Math.abs(diff);
-            adjustments.push({
-              comparable_id: comp.id, adjustment_type: "suites",
-              label: `Suítes (${diff > 0 ? "+" : ""}${diff})`,
-              percentage: diff > 0 ? pct : -pct,
-              value: Math.round(price * (pct / 100) * (diff > 0 ? 1 : -1)),
-              direction: diff > 0 ? "positive" : "negative",
-            });
-          }
-
-          // Parking
-          const subParking = subjectProp.parking_spots ?? 0;
-          const compParking = comp.parking_spots ?? 0;
-          if (subParking !== compParking) {
-            const diff = compParking - subParking;
-            const pct = 1.5 * Math.abs(diff);
-            adjustments.push({
-              comparable_id: comp.id, adjustment_type: "parking",
-              label: `Vagas (${diff > 0 ? "+" : ""}${diff})`,
-              percentage: diff > 0 ? pct : -pct,
-              value: Math.round(price * (pct / 100) * (diff > 0 ? 1 : -1)),
-              direction: diff > 0 ? "positive" : "negative",
-            });
-          }
-
-          // Area
-          const subArea = subjectProp.area_land ?? subjectProp.area_built ?? subjectProp.area_useful ?? 0;
-          const compArea = comp.area ?? 0;
-          if (subArea > 0 && compArea > 0 && subArea !== compArea) {
-            const diffPct = ((compArea - subArea) / subArea) * 100;
-            if (Math.abs(diffPct) > 5) {
-              const adjPct = Math.min(Math.abs(diffPct) * 0.15, 9);
-              adjustments.push({
-                comparable_id: comp.id, adjustment_type: "area",
-                label: `Área (${diffPct > 0 ? "+" : ""}${diffPct.toFixed(0)}%)`,
-                percentage: diffPct > 0 ? adjPct : -adjPct,
-                value: Math.round(price * (adjPct / 100) * (diffPct > 0 ? 1 : -1)),
-                direction: diffPct > 0 ? "positive" : "negative",
-              });
-            }
-          }
-
-          const totalAdj = adjustments.reduce((sum, a) => sum + a.value, 0);
-          adjustedPrices.push({ id: comp.id, adjusted_price: Math.round(price + totalAdj) });
-          allAdjustments.push(...adjustments);
+          const adjs: any[] = [];
+          const ss2 = subProp.suites ?? 0, cs2 = comp.suites ?? 0;
+          if (ss2 !== cs2) { const d = cs2 - ss2, p = 2 * Math.abs(d); adjs.push({ comparable_id: comp.id, adjustment_type: "suites", label: `Suítes (${d > 0 ? "+" : ""}${d})`, percentage: d > 0 ? p : -p, value: Math.round(price * (p / 100) * (d > 0 ? 1 : -1)), direction: d > 0 ? "positive" : "negative" }); }
+          const sp2 = subProp.parking_spots ?? 0, cp2 = comp.parking_spots ?? 0;
+          if (sp2 !== cp2) { const d = cp2 - sp2, p = 1.5 * Math.abs(d); adjs.push({ comparable_id: comp.id, adjustment_type: "parking", label: `Vagas (${d > 0 ? "+" : ""}${d})`, percentage: d > 0 ? p : -p, value: Math.round(price * (p / 100) * (d > 0 ? 1 : -1)), direction: d > 0 ? "positive" : "negative" }); }
+          const sa2 = subProp.area_land ?? subProp.area_built ?? subProp.area_useful ?? 0, ca2 = comp.area ?? 0;
+          if (sa2 > 0 && ca2 > 0 && sa2 !== ca2) { const dp = ((ca2 - sa2) / sa2) * 100; if (Math.abs(dp) > 5) { const ap = Math.min(Math.abs(dp) * 0.15, 9); adjs.push({ comparable_id: comp.id, adjustment_type: "area", label: `Área (${dp > 0 ? "+" : ""}${dp.toFixed(0)}%)`, percentage: dp > 0 ? ap : -ap, value: Math.round(price * (ap / 100) * (dp > 0 ? 1 : -1)), direction: dp > 0 ? "positive" : "negative" }); } }
+          const tot = adjs.reduce((s, a) => s + a.value, 0);
+          adjPrices.push({ id: comp.id, adjusted_price: Math.round(price + tot) });
+          allAdj.push(...adjs);
         }
+        if (allAdj.length > 0) await supabase.from("market_study_adjustments").insert(allAdj);
+        await Promise.all(adjPrices.map(ap => supabase.from("market_study_comparables").update({ adjusted_price: ap.adjusted_price }).eq("id", ap.id)));
 
-        if (allAdjustments.length > 0) {
-          await supabase.from("market_study_adjustments").insert(allAdjustments);
-        }
-
-        await Promise.all(
-          adjustedPrices.map(ap =>
-            supabase.from("market_study_comparables").update({ adjusted_price: ap.adjusted_price }).eq("id", ap.id)
-          )
-        );
-
-        // Results
-        const adjPrices = adjustedPrices.map(ap => ap.adjusted_price).filter(p => p > 0);
-        const sortedPrices = [...adjPrices].sort((a, b) => a - b);
-        const mid = Math.floor(sortedPrices.length / 2);
-        const medianPrice = sortedPrices.length % 2 !== 0 ? sortedPrices[mid] : Math.round((sortedPrices[mid - 1] + sortedPrices[mid]) / 2);
-        const avgPrice = Math.round(adjPrices.reduce((a, b) => a + b, 0) / adjPrices.length);
-
-        await supabase.from("market_study_results").insert({
-          market_study_id: marketStudyId,
-          avg_price: pricingAnalysis?.avg_price ?? avgPrice,
-          median_price: pricingAnalysis?.median_price ?? medianPrice,
-          avg_price_per_sqm: pricingAnalysis?.avg_price_per_sqm ?? 0,
-          suggested_ad_price: pricingAnalysis?.suggested_ad_price ?? Math.round(medianPrice * 1.10),
-          suggested_market_price: pricingAnalysis?.suggested_market_price ?? medianPrice,
-          suggested_fast_sale_price: pricingAnalysis?.suggested_fast_sale_price ?? Math.round(medianPrice * 0.90),
-          price_range_min: pricingAnalysis?.price_range_min ?? sortedPrices[0],
-          price_range_max: pricingAnalysis?.price_range_max ?? sortedPrices[sortedPrices.length - 1],
-          confidence_level: finalComparables.length >= 5 ? "high" : "medium",
-          executive_summary: `Análise baseada em ${finalComparables.length} comparáveis reais coletados automaticamente.`,
-          research_metadata: researchMetadata as any,
-        });
-
-        console.log(`[INNGEST][DB] Results e ${allAdjustments.length} adjustments salvos`);
-      } else if (insertedComps && insertedComps.length > 0) {
-        await supabase.from("market_study_results").insert({
-          market_study_id: marketStudyId,
-          avg_price: pricingAnalysis?.avg_price ?? 0, median_price: pricingAnalysis?.median_price ?? 0,
-          avg_price_per_sqm: pricingAnalysis?.avg_price_per_sqm ?? 0,
-          suggested_ad_price: pricingAnalysis?.suggested_ad_price ?? 0,
-          suggested_market_price: pricingAnalysis?.suggested_market_price ?? 0,
-          suggested_fast_sale_price: pricingAnalysis?.suggested_fast_sale_price ?? 0,
-          price_range_min: pricingAnalysis?.price_range_min ?? 0,
-          price_range_max: pricingAnalysis?.price_range_max ?? 0,
-          confidence_level: "medium",
-          executive_summary: `Análise baseada em ${finalComparables.length} comparáveis reais.`,
-          research_metadata: researchMetadata as any,
-        });
+        const aps = adjPrices.map(ap => ap.adjusted_price).filter(p => p > 0);
+        const sp2 = [...aps].sort((a, b) => a - b);
+        const mi = Math.floor(sp2.length / 2);
+        const medP = sp2.length % 2 !== 0 ? sp2[mi] : Math.round((sp2[mi - 1] + sp2[mi]) / 2);
+        const avP = Math.round(aps.reduce((a, b) => a + b, 0) / aps.length);
+        await supabase.from("market_study_results").insert({ market_study_id: marketStudyId, avg_price: pricingAnalysis?.avg_price ?? avP, median_price: pricingAnalysis?.median_price ?? medP, avg_price_per_sqm: pricingAnalysis?.avg_price_per_sqm ?? 0, suggested_ad_price: pricingAnalysis?.suggested_ad_price ?? Math.round(medP * 1.10), suggested_market_price: pricingAnalysis?.suggested_market_price ?? medP, suggested_fast_sale_price: pricingAnalysis?.suggested_fast_sale_price ?? Math.round(medP * 0.90), price_range_min: pricingAnalysis?.price_range_min ?? sp2[0], price_range_max: pricingAnalysis?.price_range_max ?? sp2[sp2.length - 1], confidence_level: finalComparables.length >= 5 ? "high" : "medium", executive_summary: `Análise com ${finalComparables.length} comparáveis.`, research_metadata: resMeta as any });
+        console.log(`[INNGEST][DB] Results + ${allAdj.length} adjustments`);
+      } else if (insComps && insComps.length > 0) {
+        await supabase.from("market_study_results").insert({ market_study_id: marketStudyId, avg_price: pricingAnalysis?.avg_price ?? 0, median_price: pricingAnalysis?.median_price ?? 0, avg_price_per_sqm: pricingAnalysis?.avg_price_per_sqm ?? 0, suggested_ad_price: pricingAnalysis?.suggested_ad_price ?? 0, suggested_market_price: pricingAnalysis?.suggested_market_price ?? 0, suggested_fast_sale_price: pricingAnalysis?.suggested_fast_sale_price ?? 0, price_range_min: pricingAnalysis?.price_range_min ?? 0, price_range_max: pricingAnalysis?.price_range_max ?? 0, confidence_level: "medium", executive_summary: `${finalComparables.length} comparáveis.`, research_metadata: resMeta as any });
       }
 
       // AI summary (non-fatal)
       try {
-        const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "";
-        const { data: subjectProps2 } = await supabase
-          .from("market_study_subject_properties").select("*").eq("market_study_id", marketStudyId).limit(1);
-        const summaryResp = await fetch(
-          `${supabaseUrl}/functions/v1/generate-market-summary`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY },
-            body: JSON.stringify({ subject: subjectProps2?.[0] || property, comparables: finalComparables.slice(0, 10), result: pricingAnalysis }),
-          }
-        );
-        if (summaryResp.ok) {
-          const aiSummary = await summaryResp.json();
-          if (aiSummary?.executive_summary) {
-            await supabase.from("market_study_results").update({
-              executive_summary: aiSummary.executive_summary,
-              justification: aiSummary.justification,
-              market_insights: aiSummary.market_insights,
-            }).eq("market_study_id", marketStudyId);
-          }
-        }
-      } catch (aiErr) {
-        console.warn("[INNGEST][DB] AI summary failed (non-fatal):", aiErr);
-      }
+        const ANON = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "";
+        const sr = await fetch(`${supabaseUrl}/functions/v1/generate-market-summary`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${ANON}`, apikey: ANON }, body: JSON.stringify({ subject: subProp || property, comparables: finalComparables.slice(0, 10), result: pricingAnalysis }) });
+        if (sr.ok) { const as2 = await sr.json(); if (as2?.executive_summary) await supabase.from("market_study_results").update({ executive_summary: as2.executive_summary, justification: as2.justification, market_insights: as2.market_insights }).eq("market_study_id", marketStudyId); }
+      } catch (e) { console.warn("[INNGEST] AI summary failed:", e); }
     } else if (marketStudyId && finalComparables.length === 0) {
-      await supabase.from("market_study_results").insert({
-        market_study_id: marketStudyId,
-        avg_price: 0, median_price: 0, avg_price_per_sqm: 0,
-        suggested_ad_price: 0, suggested_market_price: 0, suggested_fast_sale_price: 0,
-        confidence_level: "low",
-        executive_summary: `Nenhum comparável válido encontrado. ${discardReasons.length} anúncios foram descartados.`,
-        research_metadata: researchMetadata as any,
-      });
+      await supabase.from("market_study_results").insert({ market_study_id: marketStudyId, avg_price: 0, median_price: 0, avg_price_per_sqm: 0, suggested_ad_price: 0, suggested_market_price: 0, suggested_fast_sale_price: 0, confidence_level: "low", executive_summary: `Nenhum comparável. ${discardReasons.length} descartados.`, research_metadata: resMeta as any });
     }
 
-    // Sync to linked presentations
+    // Sync presentations
     if (marketStudyId) {
       try {
-        const { data: linkedPresentations } = await supabase
-          .from("presentations").select("id, owner_expected_price").eq("market_study_id", marketStudyId);
-
-        if (linkedPresentations && linkedPresentations.length > 0) {
-          const { data: latestResult } = await supabase
-            .from("market_study_results").select("*").eq("market_study_id", marketStudyId).single();
-
-          const { data: approvedComps } = await supabase
-            .from("market_study_comparables").select("id").eq("market_study_id", marketStudyId).eq("is_approved", true);
-
-          if (latestResult) {
-            for (const pres of linkedPresentations) {
+        const { data: lp } = await supabase.from("presentations").select("id, owner_expected_price").eq("market_study_id", marketStudyId);
+        if (lp && lp.length > 0) {
+          const { data: lr } = await supabase.from("market_study_results").select("*").eq("market_study_id", marketStudyId).single();
+          const { data: ac } = await supabase.from("market_study_comparables").select("id").eq("market_study_id", marketStudyId).eq("is_approved", true);
+          if (lr) {
+            for (const p of lp) {
               await Promise.all([
-                supabase.from("presentation_sections").update({
-                  content: {
-                    status: "completed", avg_price: latestResult.avg_price,
-                    median_price: latestResult.median_price, avg_price_per_sqm: latestResult.avg_price_per_sqm,
-                    confidence_level: latestResult.confidence_level, executive_summary: latestResult.executive_summary,
-                    comparables_count: approvedComps?.length ?? 0,
-                  },
-                }).eq("presentation_id", pres.id).eq("section_key", "market_study_placeholder"),
-                supabase.from("presentation_sections").update({
-                  content: {
-                    owner_expected_price: pres.owner_expected_price,
-                    scenarios: [
-                      { label: "Preço aspiracional", value: latestResult.suggested_ad_price || null },
-                      { label: "Preço de mercado", value: latestResult.suggested_market_price || null },
-                      { label: "Preço de venda rápida", value: latestResult.suggested_fast_sale_price || null },
-                    ],
-                  },
-                }).eq("presentation_id", pres.id).eq("section_key", "pricing_scenarios"),
+                supabase.from("presentation_sections").update({ content: { status: "completed", avg_price: lr.avg_price, median_price: lr.median_price, avg_price_per_sqm: lr.avg_price_per_sqm, confidence_level: lr.confidence_level, executive_summary: lr.executive_summary, comparables_count: ac?.length ?? 0 } }).eq("presentation_id", p.id).eq("section_key", "market_study_placeholder"),
+                supabase.from("presentation_sections").update({ content: { owner_expected_price: p.owner_expected_price, scenarios: [{ label: "Preço aspiracional", value: lr.suggested_ad_price || null }, { label: "Preço de mercado", value: lr.suggested_market_price || null }, { label: "Preço de venda rápida", value: lr.suggested_fast_sale_price || null }] } }).eq("presentation_id", p.id).eq("section_key", "pricing_scenarios"),
               ]);
             }
-            console.log(`[INNGEST][SYNC] Updated ${linkedPresentations.length} presentation(s)`);
+            console.log(`[INNGEST][SYNC] ${lp.length} presentation(s) updated`);
           }
         }
-      } catch (syncErr) {
-        console.warn("[INNGEST][SYNC] Failed (non-fatal):", syncErr);
-      }
+      } catch (e) { console.warn("[INNGEST][SYNC] Failed:", e); }
     }
 
     if (marketStudyId) await updateStudyStatus("completed");
-
-    return { success: true, comparables: finalComparables, research_metadata: researchMetadata, pricing_analysis: pricingAnalysis };
+    return { success: true, comparables: finalComparables, research_metadata: resMeta, pricing_analysis: pricingAnalysis };
   } catch (err) {
     console.error("[INNGEST] processMarketAnalysis error:", err);
-    try {
-      if (marketStudyId) {
-        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-        const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-        const sb = createClient(supabaseUrl, supabaseServiceKey);
-        await sb.from("market_studies").update({ status: "failed" }).eq("id", marketStudyId);
-      }
-    } catch (statusErr) {
-      console.error("[INNGEST] Failed to update status to failed:", statusErr);
-    }
+    try { if (marketStudyId) { const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!); await sb.from("market_studies").update({ status: "failed" }).eq("id", marketStudyId); } } catch {}
     return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
 // ============================================================
-// Inngest client + function definition
+// Inngest client + function
 // ============================================================
 const inngest = new Inngest({ id: "listing-studio-ai" });
 
 const marketStudyAnalyze = inngest.createFunction(
-  {
-    id: "market-study-analyze",
-    retries: 2,
-  },
+  { id: "market-study-analyze", retries: 2 },
   { event: "market-study/analyze.requested" },
   async ({ event }) => {
-    const { property, portals, filters, market_study_id, tenant_id } = event.data;
-
+    const { property, portals, filters, market_study_id } = event.data;
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
     if (!FIRECRAWL_API_KEY) throw new Error("FIRECRAWL_API_KEY not configured");
-
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
-    console.log(`[INNGEST] Starting market study analysis for study ${market_study_id}`);
-
-    const result = await processMarketAnalysis(
-      property, portals, filters, market_study_id, FIRECRAWL_API_KEY, LOVABLE_API_KEY
-    );
-
-    if (!result.success) {
-      throw new Error(result.error || "Market analysis failed");
-    }
-
-    return {
-      comparables_count: result.comparables?.length ?? 0,
-      market_study_id,
-    };
+    console.log(`[INNGEST] Starting analysis for study ${market_study_id}`);
+    const result = await processMarketAnalysis(property, portals, filters, market_study_id, FIRECRAWL_API_KEY, LOVABLE_API_KEY);
+    if (!result.success) throw new Error(result.error || "Market analysis failed");
+    return { comparables_count: result.comparables?.length ?? 0, market_study_id };
   }
 );
 
-// ============================================================
-// Serve handler (default export for Deno edge function)
-// ============================================================
-export default serve({
+// Serve handler
+const handler = serve({
   client: inngest,
   functions: [marketStudyAnalyze],
+  servePath: "/functions/v1/inngest-serve",
 });
+
+Deno.serve(handler);
