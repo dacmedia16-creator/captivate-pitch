@@ -1,35 +1,28 @@
 
 
-# Auto-selecionar todos os portais ativos no wizard
+# Remover portais QuintoAndar e VIP Seven
 
-## Problema
-Quando ocultamos o card de seleção de portais, o `selectedPortals` ficou como `[]`. O `runMarketAnalysisBackground` verifica `if (mktData.selectedPortals.length === 0) return;` e pula o estudo de mercado inteiro.
+## O que será feito
+Remover completamente os portais QuintoAndar e VIP Seven do sistema — banco de dados e código das edge functions.
 
-## Solução
+## Alterações
 
-### `src/components/wizard/StepMarketStudy.tsx`
-Adicionar um `useEffect` que auto-seleciona todos os portais habilitados assim que a query carrega, **somente se `selectedPortals` estiver vazio**:
+### 1. Banco de dados (migração SQL)
+- Deletar registros de `tenant_portal_settings` que referenciam esses portais
+- Deletar os 2 registros de `portal_sources` (codes: `quintoandar`, `vipseven`)
 
-```typescript
-import { useEffect } from "react";
+### 2. `supabase/functions/inngest-serve/index.ts`
+- Remover `quintoandar` e `vipseven` do `PORTAL_SITE_MAP`
+- Remover os `case "quintoandar"` e `case "vipseven"` de `buildPortalNativeUrl`
+- Remover entradas de `listingPatterns`
 
-// Dentro do componente, após a query:
-useEffect(() => {
-  if (portalList && portalList.length > 0 && data.selectedPortals.length === 0) {
-    const enabledIds = portalList
-      .filter((p: any) => p.is_enabled)
-      .map((p: any) => p.id);
-    if (enabledIds.length > 0) {
-      onChange({ ...data, selectedPortals: enabledIds });
-    }
-  }
-}, [portalList]);
-```
+### 3. `supabase/functions/analyze-market/index.ts`
+- Remover `quintoandar` e `vipseven` do `PORTAL_SITE_MAP`
 
-Isso garante que todos os portais habilitados (incluindo VIP Seven) sejam automaticamente selecionados quando o step de mercado é renderizado.
+### 4. `supabase/functions/analyze-market-manus/index.ts`
+- Remover `quintoandar` e `vipseven` do mapa de URLs
 
 ## Escopo
-- 1 arquivo editado (`StepMarketStudy.tsx`)
-- ~8 linhas adicionadas
-- Nenhuma mudança no backend
+- 1 migração SQL
+- 3 edge functions editadas (remoção de linhas)
 
