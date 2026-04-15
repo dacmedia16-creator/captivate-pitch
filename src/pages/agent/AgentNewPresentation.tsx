@@ -51,6 +51,7 @@ export default function AgentNewPresentation() {
   const [isComplete, setIsComplete] = useState(false);
   const [generationDone, setGenerationDone] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
+  const [marketPhase, setMarketPhase] = useState<string | null>(null);
   const createdIdRef = useRef<string | null>(null);
 
   const canAdvance = () => {
@@ -264,9 +265,13 @@ export default function AgentNewPresentation() {
       try {
         const { data: study } = await supabase
           .from("market_studies")
-          .select("status")
+          .select("status, current_phase")
           .eq("id", studyId)
           .single();
+
+        if (study?.current_phase) {
+          setMarketPhase(study.current_phase);
+        }
 
         if (!study || polls >= MAX_POLLS) {
           clearInterval(interval);
@@ -354,7 +359,7 @@ export default function AgentNewPresentation() {
       {step === 0 && <StepPropertyData data={propertyData} onChange={setPropertyData} />}
       {step === 1 && <StepLayoutStyle data={layoutData} onChange={setLayoutData} />}
       {step === 2 && <StepMarketStudy data={marketData} onChange={setMarketData} />}
-      {step === 3 && <StepGeneration isGenerating={isGenerating} isComplete={isComplete} generationDone={generationDone} onAnimationDone={handleAnimationDone} />}
+      {step === 3 && <StepGeneration isGenerating={isGenerating} isComplete={isComplete} generationDone={generationDone} onAnimationDone={handleAnimationDone} marketPhase={marketPhase} />}
 
       {step < 3 && (
         <div className="flex justify-between max-w-4xl mx-auto">
