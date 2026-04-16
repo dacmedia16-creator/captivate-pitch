@@ -1,65 +1,49 @@
 
 
-# Slide Resultados com dados do perfil do corretor
+# Fix: AI Extraction Timeout Causing 0 Comparables
 
-## Resumo
-Adicionar campos de portfólio e resultados pessoais ao perfil do corretor, e alimentar o slide "Resultados" com esses dados em vez de (ou além de) os dados genéricos do tenant.
+## Root Cause
+The `ai-extraction` Inngest step sends up to 20 pages of markdown to Gemini in a **single API call**. For Casa Alphaville, this call exceeded the edge function timeout (~150s), causing the function to be killed. On retry, the step returned empty results.
 
-## 1. Migration — Novos campos em `broker_profiles`
+## Solution
 
-```sql
-ALTER TABLE broker_profiles
-  ADD COLUMN portfolio_images jsonb DEFAULT '[]',
-  ADD COLUMN personal_results jsonb DEFAULT '[]',
-  ADD COLUMN personal_testimonials jsonb DEFAULT '[]';
+### 1. Split AI extraction into smaller batches (inngest-serve)
+Instead of one monolithic AI call with 20 pages, split into batches of **5 pages** each as separate `step.run()` calls. This way:
+- Each batch completes within timeout
+- Inngest memoizes completed batches
+- Partial results survive retries
+
+### 2. Add logging for AI extraction results
+Log how many comparables the AI returned vs how many passed scoring, so we can distinguish "AI returned nothing" from "scoring filtered everything".
+
+### 3. Add fallback: retry with smaller batch on failure
+If a batch AI call fails, retry with 2-3 pages instead of 5.
+
+## Files
+
+| File | Change |
+|------|--------|
+| `supabase/functions/inngest-serve/index.ts` | Split `ai-extraction` into batched `step.run()` calls of 5 pages each; add diagnostic logging before/after scoring |
+
+## Technical Detail
+
+```
+// Before (single step):
+const rawComparables = await step.run("ai-extraction", async () => {
+  return await extractWithAI(allPages, property, LOVABLE_API_KEY!);
+});
+
+// After (batched steps):
+const AI_BATCH = 5;
+const rawComparables: any[] = [];
+for (let i = 0; i < allPages.length; i += AI_BATCH) {
+  const batch = allPages.slice(i, i + AI_BATCH);
+  const batchResult = await step.run(`ai-extract-${i}`, async () => {
+    return await extractWithAI(batch, property, LOVABLE_API_KEY!);
+  });
+  rawComparables.push(...batchResult);
+}
 ```
 
-- `portfolio_images`: array de `{ image_url, caption? }` — fotos de imóveis vendidos
-- `personal_results`: array de `{ title, metric_value, description? }` — conquistas pessoais (ex: "R$ 50M em vendas", "120 imóveis vendidos")
-- `personal_testimonials`: array de `{ author_name, content }` — depoimentos sobre o corretor
-
-## 2. AgentProfile.tsx — Formulário para preencher
-
-Adicionar seção "Meus Resultados e Portfólio":
-- **Fotos de portfólio**: grid de ImageUploader (até 6 fotos) com legenda opcional
-- **Resultados pessoais**: lista editável de { título, valor métrico } (ex: "Vendas realizadas" → "120+")
-- **Depoimentos pessoais**: lista editável de { autor, conteúdo }
-
-## 3. Geração — Alimentar slide "results" com dados do corretor
-
-Em `useGeneratePresentation.ts`, no case `"results"`:
-```
-content = {
-  items: brokerProfile?.personal_results?.length > 0
-    ? brokerProfile.personal_results
-    : salesResults || [],
-  testimonials: brokerProfile?.personal_testimonials?.length > 0
-    ? brokerProfile.personal_testimonials
-    : testimonials || [],
-  portfolio_images: brokerProfile?.portfolio_images || [],
-  broker_name: profile?.full_name,
-  avatar_url: profile?.avatar_url,
-};
-```
-
-Prioridade: dados do corretor > dados genéricos do tenant (fallback).
-
-## 4. Layouts — Redesenhar slide "results"
-
-Nos 3 layouts (Executivo, Premium, Impacto), adicionar:
-- Foto do corretor + nome no topo ou lateral do slide
-- Grid de fotos de portfólio (se houver)
-- Métricas pessoais com destaque visual
-- Depoimentos abaixo
-
-## Arquivos
-
-| Arquivo | Mudança |
-|---------|---------|
-| DB (migration) | 3 novos campos jsonb em broker_profiles |
-| `src/pages/agent/AgentProfile.tsx` | Seção de portfólio, resultados e depoimentos |
-| `src/hooks/useGeneratePresentation.ts` | Priorizar dados do corretor no slide results |
-| `src/components/layouts/LayoutExecutivo.tsx` | Redesenhar results com foto + portfólio |
-| `src/components/layouts/LayoutPremium.tsx` | Idem |
-| `src/components/layouts/LayoutImpactoComercial.tsx` | Idem |
+This ensures each AI call processes ~5 pages (~30s) instead of 20 pages (~120s+), staying well within edge function limits and surviving retries gracefully.
 
