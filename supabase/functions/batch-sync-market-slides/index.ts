@@ -129,14 +129,13 @@ Deno.serve(async (req) => {
         comparables_count: comparables.length,
       };
 
-      const pricingScenariosContent = {
-        owner_expected_price: pres.owner_expected_price || subject?.owner_expected_price,
-        scenarios: [
-          { label: "Preço aspiracional", value: report.suggested_ad_price || null },
-          { label: "Preço de mercado", value: report.suggested_market_price || null },
-          { label: "Preço de venda rápida", value: report.suggested_fast_sale_price || null },
-        ],
-      };
+        const pricingScenariosContent = {
+          owner_expected_price: pres.owner_expected_price || subject?.owner_expected_price,
+          scenarios: [
+            { label: "Preço de mercado", value: report.suggested_market_price || null },
+            { label: "Preço de venda rápida", value: report.suggested_fast_sale_price || null },
+          ],
+        };
 
       // Check existing sections
       const { data: existingSections } = await supabase

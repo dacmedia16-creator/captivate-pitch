@@ -280,9 +280,8 @@ export default function MarketStudyResult() {
           content: {
             owner_expected_price: subject?.owner_expected_price,
             scenarios: [
-              { label: "Venda Acelerada", value: result?.suggested_fast_sale_price },
               { label: "Preço de Mercado", value: result?.suggested_market_price },
-              { label: "Aspiracional", value: result?.suggested_ad_price },
+              { label: "Venda Acelerada", value: result?.suggested_fast_sale_price },
             ],
           },
         },
