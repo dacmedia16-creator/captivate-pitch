@@ -295,8 +295,8 @@ async function collectUrls(
   }
 
   const limitedPortals = searchablePortals;
-  const maxResults = Math.min(Number(filters.maxComparables) || 15, 20);
-  const resultsPerPortal = Math.max(5, Math.min(Math.ceil((maxResults * 2) / limitedPortals.length), 10));
+  const maxResults = Math.min(Number(filters.maxComparables) || 15, 30);
+  const resultsPerPortal = Math.max(8, Math.min(Math.ceil((maxResults * 3) / limitedPortals.length), 15));
 
   // FASE 1A: Scrape nativo
   console.log(`[INNGEST][FASE 1A] Scraping nativo em ${limitedPortals.length} portais...`);
@@ -320,7 +320,7 @@ async function collectUrls(
       const listingUrls = pattern ? links.filter(l => pattern.test(l)) : [];
       console.log(`[INNGEST][FASE 1A] ${portal.name}: ${links.length} links, ${listingUrls.length} anúncios`);
       if (listingUrls.length > 0) {
-        return { urls: [...new Set(listingUrls)].slice(0, 20).map(url => ({ url, title: "", portal, snippet: "native-scrape" })), limitation: null };
+        return { urls: [...new Set(listingUrls)].slice(0, 30).map(url => ({ url, title: "", portal, snippet: "native-scrape" })), limitation: null };
       }
       if (markdown.length > 200) {
         try {
@@ -330,7 +330,7 @@ async function collectUrls(
           });
           if (extractRes.ok) {
             const tc = (await extractRes.json()).choices?.[0]?.message?.tool_calls?.[0];
-            if (tc) { const urls: string[] = JSON.parse(tc.function.arguments).urls || []; if (urls.length > 0) return { urls: [...new Set(urls)].slice(0, 20).map(url => ({ url, title: "", portal, snippet: "native-ai-extract" })), limitation: null }; }
+            if (tc) { const urls: string[] = JSON.parse(tc.function.arguments).urls || []; if (urls.length > 0) return { urls: [...new Set(urls)].slice(0, 30).map(url => ({ url, title: "", portal, snippet: "native-ai-extract" })), limitation: null }; }
           } else { await extractRes.text(); }
         } catch (aiErr) { console.warn(`[INNGEST][FASE 1A] ${portal.name}: AI failed`, aiErr); }
       }
@@ -620,7 +620,7 @@ function scoreAndFilter(
   portalResults: PortalResult[], discardReasons: DiscardReason[],
   limitations: string[], totalUrlsFound: number, listingsOpened: number,
 ) {
-  const maxResults = Math.min(Number(filters.maxComparables) || 15, 20);
+  const maxResults = Math.min(Number(filters.maxComparables) || 15, 30);
   const baseArea = Number(property.area_total || property.area_built || property.area_land) || 100;
   const baseBed = Number(property.bedrooms) || 3, baseSu = Number(property.suites) || 0, basePk = Number(property.parking_spots) || 0;
   const validComparables: any[] = [];
@@ -735,7 +735,7 @@ const marketStudyAnalyze = inngest.createFunction(
     }
 
     // Prepare URLs for scraping — select top MAX_URLS, ensure min per portal
-    const MAX_URLS = 25, MIN_PER_PORTAL_VAL = 3;
+    const MAX_URLS = 40, MIN_PER_PORTAL_VAL = 4;
     const byPortal = new Map<string, UrlItem[]>();
     for (const item of urlData.urls) { const k = item.portal.code; if (!byPortal.has(k)) byPortal.set(k, []); byPortal.get(k)!.push(item); }
     const selectedUrlsSet = new Set<string>();
@@ -819,7 +819,7 @@ const marketStudyAnalyze = inngest.createFunction(
 
     // Batch AI extraction: 5 pages per step.run() to stay within timeout
     const AI_BATCH_SIZE = 2;
-    const MAX_AI_PAGES = 15;
+    const MAX_AI_PAGES = 30;
     let aiPages = pagesNeedingAI;
     if (aiPages.length > MAX_AI_PAGES) {
       aiPages = [
