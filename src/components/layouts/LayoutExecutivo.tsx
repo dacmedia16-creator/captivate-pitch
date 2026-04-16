@@ -142,20 +142,12 @@ export function LayoutExecutivo({ section, branding, theme, colors }: Props) {
         </div>
 
         {/* Price positioning */}
-        {(ownerPrice || marketPrice) && (
+        {ownerPrice && (
           <div className="flex gap-8 mb-8">
-            {ownerPrice && (
-              <div className="flex-1 p-8 rounded-lg" style={{ backgroundColor: neutral }}>
-                <p className="font-medium mb-2" style={{ fontSize: "20px", color: colors.textLight }}>Valor pretendido</p>
-                <p className="font-bold" style={{ fontSize: "40px", color: primary }}>R$ {Number(ownerPrice).toLocaleString("pt-BR")}</p>
-              </div>
-            )}
-            {marketPrice && (
-              <div className="flex-1 p-8 rounded-lg" style={{ backgroundColor: accent + "10" }}>
-                <p className="font-medium mb-2" style={{ fontSize: "20px", color: colors.textLight }}>Valor sugerido de mercado</p>
-                <p className="font-bold" style={{ fontSize: "40px", color: accent }}>R$ {Number(marketPrice).toLocaleString("pt-BR")}</p>
-              </div>
-            )}
+            <div className="flex-1 p-8 rounded-lg" style={{ backgroundColor: neutral }}>
+              <p className="font-medium mb-2" style={{ fontSize: "20px", color: colors.textLight }}>Valor pretendido</p>
+              <p className="font-bold" style={{ fontSize: "40px", color: primary }}>R$ {Number(ownerPrice).toLocaleString("pt-BR")}</p>
+            </div>
           </div>
         )}
 
