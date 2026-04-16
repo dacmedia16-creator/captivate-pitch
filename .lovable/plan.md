@@ -1,57 +1,41 @@
 
 
-# Fix: Teste 21 travado — `extractWithAI` sem tratamento de resposta vazia
+# Viva Real: mesmo bug do ZAP/OLX — URL nativa retorna showcase do RJ
 
 ## Diagnóstico
 
-O Teste 21 está preso em `processing` com 0 comparáveis. O erro é:
+Os discards do Teste 22 confirmam: **todas as 14 URLs do scrape nativo do Viva Real são do Rio de Janeiro** com `source=showcase%2CERROR+PAGE`. É exatamente o mesmo problema que já corrigimos no ZAP e OLX.
 
+A URL nativa gerada é:
 ```
-SyntaxError: Unexpected end of JSON input
-  at extractWithAI (inngest-serve/index.ts:875)
+https://www.vivareal.com.br/venda/sp/sorocaba/parque-campolim/apartamentos_residencial/
 ```
 
-**Causa**: Na linha 525, `(await aiRes.json())` falha quando a API de IA retorna body vazio ou truncado (status 200 mas sem conteúdo válido). Não há try/catch, então o step do Inngest falha e fica em loop de retry.
+O Viva Real **não reconhece** esse formato e redireciona para uma página de showcase com anúncios do RJ.
+
+Os resultados do Google Search do Viva Real existem mas são **duplicatas** dos mesmos imóveis já encontrados via ZAP (são o mesmo grupo — ZAP e Viva Real compartilham listagens).
+
+O OLX também não aparece nos resultados — o Google Search aparentemente não retornou nada para OLX Sorocaba.
 
 ## Correção
 
 ### `supabase/functions/inngest-serve/index.ts`
 
-**Envolver o parse do JSON da IA em try/catch** (linhas 525-526):
+**Desabilitar URL nativa do Viva Real** — retornar `null` no `buildPortalNativeUrl`:
 
 ```typescript
-// ANTES:
-const tc = (await aiRes.json()).choices?.[0]?.message?.tool_calls?.[0];
-if (!tc) return preExtracted;
-
-// DEPOIS:
-let tc;
-try {
-  const aiBody = await aiRes.text();
-  if (!aiBody || aiBody.length < 10) {
-    console.warn(`[INNGEST][FASE 3] AI retornou body vazio (${aiBody.length} chars)`);
-    return preExtracted;
-  }
-  tc = JSON.parse(aiBody).choices?.[0]?.message?.tool_calls?.[0];
-} catch (parseErr) {
-  console.error(`[INNGEST][FASE 3] Falha ao parsear resposta da IA:`, parseErr);
-  return preExtracted;
-}
-if (!tc) return preExtracted;
+case "vivareal":
+  return null; // Viva Real redireciona para showcase do RJ com esse formato de URL
 ```
 
-Isso faz a função retornar os comparáveis pré-extraídos (se houver) ao invés de crashar quando a IA retorna resposta inválida.
+Isso elimina as 14 URLs inúteis do RJ e os créditos Firecrawl desperdiçados. Os resultados do Google Search continuam funcionando (mas tendem a ser duplicatas do ZAP).
 
-### Resetar o Teste 21
-
-Atualizar o status do estudo para `failed` via migration para destravar:
-
-```sql
-UPDATE market_studies SET status = 'failed' WHERE id = '5ffc5d2b-1a50-4713-9333-f3faa59823ae' AND status = 'processing';
-```
+## Impacto
+- Elimina ~14 URLs desperdiçadas por estudo
+- Economiza créditos Firecrawl (1 scrape nativo + 14 scrapes individuais)
+- Resultados do Viva Real via Google Search continuam habilitados
 
 ## Escopo
-- 1 arquivo editado (1 bloco de ~12 linhas)
-- 1 migration (1 UPDATE)
+- 1 linha alterada em `inngest-serve/index.ts`
 - Redeploy de 1 edge function
 
