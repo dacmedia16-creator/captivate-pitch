@@ -262,6 +262,22 @@ export default function AgentProfile() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Portfólio e Resultados */}
+      <PortfolioSection
+        images={broker.portfolio_images}
+        onChange={(imgs) => setBroker((b) => ({ ...b, portfolio_images: imgs }))}
+      />
+
+      <PersonalResultsSection
+        results={broker.personal_results}
+        onChange={(results) => setBroker((b) => ({ ...b, personal_results: results }))}
+      />
+
+      <PersonalTestimonialsSection
+        testimonials={broker.personal_testimonials}
+        onChange={(testimonials) => setBroker((b) => ({ ...b, personal_testimonials: testimonials }))}
+      />
     </div>
   );
 }
