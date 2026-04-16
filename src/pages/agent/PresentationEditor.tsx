@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,6 +11,7 @@ import { ScaledSlide } from "@/components/layouts/ScaledSlide";
 import { PresentationEditorSkeleton } from "@/components/skeletons/PresentationEditorSkeleton";
 import { toast } from "sonner";
 import { logAudit } from "@/hooks/useAuditLog";
+import { syncMarketStudySections } from "@/hooks/syncMarketStudySections";
 
 export default function PresentationEditor() {
   const { id } = useParams<{ id: string }>();
