@@ -111,7 +111,7 @@ export function LayoutExecutivo({ section, branding, theme, colors }: Props) {
 
   /* ═══════ MARKET STUDY — SLIDE 1: PARECER DE AVALIAÇÃO ═══════ */
   if (section.section_key === "market_study_subject" && c.status === "completed") {
-    const sp = c.subject_property;
+    const sp = c.subject_property || {};
     const confidenceMap: Record<string, { label: string; color: string }> = {
       high: { label: "Alta", color: "#16A34A" },
       medium: { label: "Média", color: "#D97706" },
@@ -120,42 +120,81 @@ export function LayoutExecutivo({ section, branding, theme, colors }: Props) {
     const conf = confidenceMap[c.confidence_level] || confidenceMap.medium;
     const ownerPrice = sp?.owner_expected_price;
     const marketPrice = c.suggested_market_price || c.avg_price;
+    const fmt = (v: any) => v ? `R$ ${Number(v).toLocaleString("pt-BR")}` : "—";
+    const area = sp?.area_built || sp?.area_useful || sp?.area_land;
+    const ownerPpsm = ownerPrice && area ? ownerPrice / area : null;
+    const diffPct = ownerPrice && marketPrice ? ((ownerPrice - marketPrice) / marketPrice) * 100 : null;
+    const diffColor = diffPct == null ? colors.textLight : diffPct > 8 ? "#DC2626" : diffPct < -8 ? "#16A34A" : "#D97706";
+    const diffLabel = diffPct == null ? "" : diffPct > 0 ? `+${diffPct.toFixed(1)}% acima` : `${diffPct.toFixed(1)}% abaixo`;
 
     return (
       <div className="w-full h-full bg-white p-16 flex flex-col" style={{ fontFamily: FONT }}>
         <SlideLabel color={accent}>Análise de mercado</SlideLabel>
-        <h2 className="slide-title mt-4 mb-6" style={{ fontSize: theme.heading.titleSize, color: primary, textTransform }}>Parecer de Avaliação</h2>
+        <h2 className="slide-title mt-3 mb-4" style={{ fontSize: theme.heading.titleSize, color: primary, textTransform }}>Parecer de Avaliação</h2>
         <SlideDivider theme={theme} colors={colors} />
 
         {/* Context line + confidence */}
-        <div className="flex items-center justify-between mt-6 mb-6">
-          <div className="flex flex-wrap gap-x-8 gap-y-2" style={{ fontSize: "22px", color: textMuted }}>
-            {sp?.property_type && <span>{sp.property_type}</span>}
-            {sp?.construction_standard && <><span style={{ color: colors.textLight }}>·</span><span>{sp.construction_standard}</span></>}
-            {sp?.conservation_state && <><span style={{ color: colors.textLight }}>·</span><span>{sp.conservation_state}</span></>}
+        <div className="flex items-center justify-between mt-5 mb-5">
+          <div className="flex flex-wrap gap-x-6 gap-y-2" style={{ fontSize: "20px", color: textMuted }}>
+            {sp?.property_type && <span className="font-semibold" style={{ color: primary }}>{sp.property_type}</span>}
+            {sp?.construction_standard && <><span style={{ color: colors.textLight }}>·</span><span>Padrão {sp.construction_standard}</span></>}
+            {sp?.conservation_state && <><span style={{ color: colors.textLight }}>·</span><span>Conservação {sp.conservation_state}</span></>}
             {sp?.property_age && <><span style={{ color: colors.textLight }}>·</span><span>{sp.property_age}</span></>}
-            {sp?.neighborhood && <><span style={{ color: colors.textLight }}>·</span><span>{sp.neighborhood}</span></>}
+            {sp?.neighborhood && <><span style={{ color: colors.textLight }}>·</span><span>{sp.neighborhood}{sp?.city ? `, ${sp.city}` : ""}</span></>}
+            {sp?.condominium && <><span style={{ color: colors.textLight }}>·</span><span>{sp.condominium}</span></>}
           </div>
-          <span className="shrink-0 px-5 py-2 rounded-full font-bold" style={{ fontSize: "20px", backgroundColor: conf.color + "15", color: conf.color }}>
+          <span className="shrink-0 px-5 py-2 rounded-full font-bold" style={{ fontSize: "18px", backgroundColor: conf.color + "15", color: conf.color }}>
             Confiança {conf.label}
           </span>
         </div>
 
-        {/* Price positioning */}
-        {ownerPrice && (
-          <div className="flex gap-8 mb-8">
-            <div className="flex-1 p-8 rounded-lg" style={{ backgroundColor: neutral }}>
-              <p className="font-medium mb-2" style={{ fontSize: "20px", color: colors.textLight }}>Valor pretendido</p>
-              <p className="font-bold" style={{ fontSize: "40px", color: primary }}>R$ {Number(ownerPrice).toLocaleString("pt-BR")}</p>
+        {/* Property specs strip */}
+        <div className="grid grid-cols-6 gap-4 py-5 px-6 rounded-lg mb-5" style={{ backgroundColor: neutral }}>
+          {[
+            { label: "Área", value: area ? `${area}m²` : null },
+            { label: "Quartos", value: sp?.bedrooms },
+            { label: "Suítes", value: sp?.suites },
+            { label: "Banheiros", value: sp?.bathrooms },
+            { label: "Vagas", value: sp?.parking_spots },
+            { label: "Terreno", value: sp?.area_land ? `${sp.area_land}m²` : null },
+          ].filter(i => i.value != null && i.value !== "").map((item, i) => (
+            <div key={i}>
+              <p className="font-bold" style={{ fontSize: "26px", color: primary }}>{item.value}</p>
+              <p className="mt-1 uppercase tracking-wider" style={{ fontSize: "13px", color: colors.textLight, fontWeight: 600 }}>{item.label}</p>
             </div>
-          </div>
-        )}
+          ))}
+        </div>
+
+        {/* Price comparison cards */}
+        <div className="grid grid-cols-3 gap-4 mb-5">
+          {ownerPrice && (
+            <div className="p-5 rounded-lg" style={{ backgroundColor: neutral }}>
+              <p className="font-medium mb-2 uppercase tracking-wider" style={{ fontSize: "13px", color: colors.textLight, fontWeight: 600 }}>Valor pretendido</p>
+              <p className="font-bold" style={{ fontSize: "28px", color: primary }}>{fmt(ownerPrice)}</p>
+              {ownerPpsm && <p className="mt-1" style={{ fontSize: "15px", color: textMuted }}>R$ {Math.round(ownerPpsm).toLocaleString("pt-BR")}/m²</p>}
+            </div>
+          )}
+          {marketPrice && (
+            <div className="p-5 rounded-lg" style={{ backgroundColor: accent + "10", border: `2px solid ${accent}` }}>
+              <p className="font-medium mb-2 uppercase tracking-wider" style={{ fontSize: "13px", color: accent, fontWeight: 700 }}>Sugerido de mercado</p>
+              <p className="font-bold" style={{ fontSize: "28px", color: accent }}>{fmt(marketPrice)}</p>
+              {c.avg_price_per_sqm && <p className="mt-1" style={{ fontSize: "15px", color: textMuted }}>R$ {Math.round(c.avg_price_per_sqm).toLocaleString("pt-BR")}/m² médio</p>}
+            </div>
+          )}
+          {diffPct != null && (
+            <div className="p-5 rounded-lg" style={{ backgroundColor: neutral }}>
+              <p className="font-medium mb-2 uppercase tracking-wider" style={{ fontSize: "13px", color: colors.textLight, fontWeight: 600 }}>Posicionamento</p>
+              <p className="font-bold" style={{ fontSize: "28px", color: diffColor }}>{diffLabel}</p>
+              <p className="mt-1" style={{ fontSize: "15px", color: textMuted }}>vs. valor de mercado</p>
+            </div>
+          )}
+        </div>
 
         {/* Executive summary */}
         {c.executive_summary && (
           <div className="flex-1 overflow-hidden">
-            <p className="font-bold mb-3" style={{ fontSize: "22px", color: primary }}>Resumo Executivo</p>
-            <p className="leading-relaxed" style={{ fontSize: "21px", color: textMuted, lineHeight: "1.7" }}>{c.executive_summary}</p>
+            <p className="font-bold mb-2 uppercase tracking-wider" style={{ fontSize: "13px", color: accent, fontWeight: 700 }}>Resumo Executivo</p>
+            <p className="leading-relaxed" style={{ fontSize: "19px", color: textMuted, lineHeight: "1.6" }}>{c.executive_summary}</p>
           </div>
         )}
       </div>
