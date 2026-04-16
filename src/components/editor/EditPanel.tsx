@@ -9,8 +9,7 @@ import { Building, User, Globe, MapPin, Home, Target, Award, TrendingUp, BarChar
 const sectionIcons: Record<string, any> = {
   cover: Building, broker_intro: User, about_global: Globe, about_national: Globe,
   about_regional: MapPin, property_summary: Home, marketing_plan: Target,
-  differentials: Award, results: TrendingUp, market_study_placeholder: BarChart3,
-  pricing_scenarios: DollarSign, closing: Phone,
+  differentials: Award, results: TrendingUp, pricing_scenarios: DollarSign, closing: Phone,
   objectives_alignment: Key, agency_value_proposition: Briefcase, required_documentation: FileText,
 };
 

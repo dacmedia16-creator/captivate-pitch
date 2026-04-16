@@ -320,14 +320,6 @@ export default function AgentNewPresentation() {
           ],
         } as any,
       }).eq("presentation_id", presId).eq("section_key", "pricing_scenarios"),
-      supabase.from("presentation_sections").update({
-        content: {
-          comparables: chartComparables,
-          owner_expected_price: propData.owner_expected_price ? Number(propData.owner_expected_price) : null,
-          avg_price: result.avg_price, median_price: result.median_price,
-          avg_price_per_sqm: result.avg_price_per_sqm, status: "completed",
-        } as any,
-      }).eq("presentation_id", presId).eq("section_key", "market_study_placeholder"),
     ]);
   };
 
