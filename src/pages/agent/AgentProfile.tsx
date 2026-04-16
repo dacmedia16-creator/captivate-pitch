@@ -116,7 +116,10 @@ export default function AgentProfile() {
         vgv_summary: broker.vgv_summary || null,
         preferred_tone: broker.preferred_tone || null,
         preferred_layout: broker.preferred_layout || null,
-      }, { onConflict: "user_id" });
+        portfolio_images: broker.portfolio_images,
+        personal_results: broker.personal_results,
+        personal_testimonials: broker.personal_testimonials,
+      } as any, { onConflict: "user_id" });
       if (bErr) throw bErr;
 
       toast.success("Perfil salvo com sucesso!");
