@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,6 +11,7 @@ import { ScaledSlide } from "@/components/layouts/ScaledSlide";
 import { PresentationEditorSkeleton } from "@/components/skeletons/PresentationEditorSkeleton";
 import { toast } from "sonner";
 import { logAudit } from "@/hooks/useAuditLog";
+import { syncMarketStudySections } from "@/hooks/syncMarketStudySections";
 
 export default function PresentationEditor() {
   const { id } = useParams<{ id: string }>();
@@ -56,6 +57,26 @@ export default function PresentationEditor() {
     },
     enabled: !!id,
   });
+  // Auto-sync: if presentation has a market_study_id and the section is pending/outdated, trigger sync
+  const syncTriggered = useRef(false);
+  useEffect(() => {
+    if (syncTriggered.current || !presentation?.market_study_id || localSections.length === 0) return;
+    const marketSection = localSections.find(s => s.section_key === "market_study_placeholder");
+    if (!marketSection) return;
+    const content = marketSection.content as any;
+    if (content?.status === "completed" && content?.comparables?.length > 0) return;
+    
+    syncTriggered.current = true;
+    supabase.from("market_studies").select("status").eq("id", presentation.market_study_id).single()
+      .then(({ data }) => {
+        if (data?.status === "completed") {
+          syncMarketStudySections(presentation.market_study_id!).then(() => {
+            queryClient.invalidateQueries({ queryKey: ["presentation-sections", id] });
+            toast.success("Estudo de mercado atualizado na apresentação!");
+          });
+        }
+      });
+  }, [presentation?.market_study_id, localSections, id, queryClient]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {

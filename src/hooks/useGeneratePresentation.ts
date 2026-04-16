@@ -103,6 +103,13 @@ export async function generatePresentationSections({ presentationId, tenantId, b
   // Fetch market data from official or legacy flow
   const { comparables, report } = presentation ? await fetchMarketData(presentation) : { comparables: [], report: null };
 
+  // Fetch subject property if market_study_id exists
+  let subjectProperty: any = null;
+  if (presentation?.market_study_id) {
+    const { data } = await supabase.from("market_study_subject_properties").select("*").eq("market_study_id", presentation.market_study_id).single();
+    subjectProperty = data;
+  }
+
   const agencyAny = agency as any;
 
   const sections = SECTION_DEFINITIONS.map(def => {
@@ -192,6 +199,41 @@ export async function generatePresentationSections({ presentationId, tenantId, b
         break;
       case "market_study_placeholder":
         if (report) {
+          const comparablesForSlide = comparables.map((comp: any) => ({
+            title: comp.title,
+            price: comp.price,
+            area: comp.area,
+            bedrooms: comp.bedrooms,
+            suites: comp.suites,
+            parking_spots: comp.parking_spots,
+            bathrooms: comp.bathrooms,
+            neighborhood: comp.neighborhood,
+            condominium: comp.condominium,
+            conservation_state: comp.conservation_state,
+            construction_standard: comp.construction_standard,
+            similarity_score: comp.similarity_score,
+            adjusted_price: comp.adjusted_price,
+            price_per_sqm: comp.price_per_sqm,
+            source_name: comp.source_name,
+          }));
+          const subjectForSlide = subjectProperty ? {
+            property_type: subjectProperty.property_type,
+            construction_standard: subjectProperty.construction_standard,
+            conservation_state: subjectProperty.conservation_state,
+            property_age: subjectProperty.property_age,
+            area_built: subjectProperty.area_built,
+            area_land: subjectProperty.area_land,
+            area_useful: subjectProperty.area_useful,
+            bedrooms: subjectProperty.bedrooms,
+            suites: subjectProperty.suites,
+            bathrooms: subjectProperty.bathrooms,
+            parking_spots: subjectProperty.parking_spots,
+            neighborhood: subjectProperty.neighborhood,
+            city: subjectProperty.city,
+            condominium: subjectProperty.condominium,
+            differentials: subjectProperty.differentials,
+            owner_expected_price: subjectProperty.owner_expected_price,
+          } : null;
           content = {
             status: "completed",
             avg_price: report.avg_price,
@@ -200,6 +242,9 @@ export async function generatePresentationSections({ presentationId, tenantId, b
             confidence_level: report.confidence_level,
             executive_summary: report.executive_summary || report.summary,
             comparables_count: comparables.length,
+            comparables: comparablesForSlide,
+            subject_property: subjectForSlide,
+            owner_expected_price: presentation?.owner_expected_price || subjectProperty?.owner_expected_price,
           };
         } else {
           content = { status: "pending", message: "O estudo de mercado será inserido aqui após processamento." };
