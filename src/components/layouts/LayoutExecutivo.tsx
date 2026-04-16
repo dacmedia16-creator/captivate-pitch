@@ -130,59 +130,77 @@ export function LayoutExecutivo({ section, branding, theme, colors }: Props) {
     return (
       <div className="w-full h-full bg-white p-16 flex flex-col" style={{ fontFamily: FONT }}>
         <SlideLabel color={accent}>Análise de mercado</SlideLabel>
-        <h2 className="slide-title mt-3 mb-4" style={{ fontSize: theme.heading.titleSize, color: primary, textTransform }}>Parecer de Avaliação</h2>
-        <SlideDivider theme={theme} colors={colors} />
+        <h2 className="slide-title mt-3" style={{ fontSize: theme.heading.titleSize, color: primary, textTransform }}>Parecer de Avaliação</h2>
 
-        {/* Context line + confidence */}
-        <div className="flex items-center justify-between mt-5 mb-5">
-          <div className="flex flex-wrap gap-x-6 gap-y-2" style={{ fontSize: "20px", color: textMuted }}>
-            {sp?.property_type && <span className="font-semibold" style={{ color: primary }}>{sp.property_type}</span>}
-            {sp?.construction_standard && <><span style={{ color: colors.textLight }}>·</span><span>Padrão {sp.construction_standard}</span></>}
-            {sp?.conservation_state && <><span style={{ color: colors.textLight }}>·</span><span>Conservação {sp.conservation_state}</span></>}
-            {sp?.property_age && <><span style={{ color: colors.textLight }}>·</span><span>{sp.property_age}</span></>}
-            {sp?.neighborhood && <><span style={{ color: colors.textLight }}>·</span><span>{sp.neighborhood}{sp?.city ? `, ${sp.city}` : ""}</span></>}
-            {sp?.condominium && <><span style={{ color: colors.textLight }}>·</span><span>{sp.condominium}</span></>}
-          </div>
-          <span className="shrink-0 px-5 py-2 rounded-full font-bold" style={{ fontSize: "18px", backgroundColor: conf.color + "15", color: conf.color }}>
+        {/* Localização + confiança */}
+        <div className="flex items-center justify-between mt-4 mb-6">
+          <p style={{ fontSize: "22px", color: textMuted }}>
+            {[sp?.neighborhood, sp?.city].filter(Boolean).join(", ")}
+            {sp?.condominium && <span style={{ color: colors.textLight }}> · {sp.condominium}</span>}
+          </p>
+          <span className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full font-bold" style={{ fontSize: "16px", backgroundColor: conf.color + "15", color: conf.color }}>
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: conf.color }} />
             Confiança {conf.label}
           </span>
         </div>
 
-        {/* Property specs strip */}
-        <div className="grid grid-cols-6 gap-4 py-5 px-6 rounded-lg mb-5" style={{ backgroundColor: neutral }}>
+        <SlideDivider theme={theme} colors={colors} />
+
+        {/* HERO: Valor pretendido em destaque */}
+        {ownerPrice && (
+          <div className="mt-7 mb-7 flex items-end justify-between gap-8 pb-7" style={{ borderBottom: `1px solid ${neutral}` }}>
+            <div>
+              <p className="uppercase tracking-widest mb-2" style={{ fontSize: "13px", color: colors.textLight, fontWeight: 700 }}>Valor pretendido pelo proprietário</p>
+              <p className="font-bold leading-none" style={{ fontSize: "68px", color: primary, letterSpacing: "-0.02em" }}>{fmt(ownerPrice)}</p>
+              {ownerPpsm && (
+                <p className="mt-3" style={{ fontSize: "18px", color: textMuted }}>
+                  <span className="font-bold" style={{ color: accent }}>R$ {Math.round(ownerPpsm).toLocaleString("pt-BR")}</span>
+                  <span style={{ color: colors.textLight }}> por m²</span>
+                </p>
+              )}
+            </div>
+            {/* Tags do imóvel */}
+            <div className="flex flex-col items-end gap-2 max-w-[40%]">
+              {sp?.property_type && (
+                <span className="px-4 py-1.5 rounded-full font-semibold" style={{ fontSize: "16px", backgroundColor: primary, color: "white" }}>
+                  {sp.property_type}
+                </span>
+              )}
+              <div className="flex flex-wrap justify-end gap-2">
+                {sp?.construction_standard && <span className="px-3 py-1 rounded-full" style={{ fontSize: "14px", backgroundColor: neutral, color: textMuted }}>Padrão {sp.construction_standard}</span>}
+                {sp?.conservation_state && <span className="px-3 py-1 rounded-full" style={{ fontSize: "14px", backgroundColor: neutral, color: textMuted }}>Conservação {sp.conservation_state}</span>}
+                {sp?.property_age && <span className="px-3 py-1 rounded-full" style={{ fontSize: "14px", backgroundColor: neutral, color: textMuted }}>{sp.property_age}</span>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Specs do imóvel — números grandes em linha */}
+        <div className="flex justify-between items-end mb-7">
           {[
-            { label: "Área", value: area ? `${area}m²` : null },
-            { label: "Quartos", value: sp?.bedrooms },
-            { label: "Suítes", value: sp?.suites },
-            { label: "Banheiros", value: sp?.bathrooms },
-            { label: "Vagas", value: sp?.parking_spots },
-            { label: "Terreno", value: sp?.area_land ? `${sp.area_land}m²` : null },
-          ].filter(i => i.value != null && i.value !== "").map((item, i) => (
-            <div key={i}>
-              <p className="font-bold" style={{ fontSize: "26px", color: primary }}>{item.value}</p>
-              <p className="mt-1 uppercase tracking-wider" style={{ fontSize: "13px", color: colors.textLight, fontWeight: 600 }}>{item.label}</p>
+            { label: "Área útil", value: area ? `${area}` : null, unit: "m²" },
+            { label: "Quartos", value: sp?.bedrooms, unit: null },
+            { label: "Suítes", value: sp?.suites, unit: null },
+            { label: "Banheiros", value: sp?.bathrooms, unit: null },
+            { label: "Vagas", value: sp?.parking_spots, unit: null },
+            { label: "Terreno", value: sp?.area_land, unit: "m²" },
+          ].filter(i => i.value != null && i.value !== "").map((item, i, arr) => (
+            <div key={i} className="flex-1 text-center relative">
+              {i > 0 && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-12" style={{ backgroundColor: neutral }} />}
+              <p className="font-bold leading-none" style={{ fontSize: "44px", color: primary, letterSpacing: "-0.02em" }}>
+                {item.value}
+                {item.unit && <span style={{ fontSize: "22px", color: colors.textLight, marginLeft: "4px" }}>{item.unit}</span>}
+              </p>
+              <p className="mt-3 uppercase tracking-widest" style={{ fontSize: "12px", color: colors.textLight, fontWeight: 600 }}>{item.label}</p>
             </div>
           ))}
         </div>
 
-        {/* Price comparison cards */}
-        <div className="grid grid-cols-3 gap-4 mb-5">
-          {ownerPrice && (
-            <div className="p-5 rounded-lg" style={{ backgroundColor: neutral }}>
-              <p className="font-medium mb-2 uppercase tracking-wider" style={{ fontSize: "13px", color: colors.textLight, fontWeight: 600 }}>Valor pretendido</p>
-              <p className="font-bold" style={{ fontSize: "28px", color: primary }}>{fmt(ownerPrice)}</p>
-              {ownerPpsm && <p className="mt-1" style={{ fontSize: "15px", color: textMuted }}>R$ {Math.round(ownerPpsm).toLocaleString("pt-BR")}/m²</p>}
-            </div>
-          )}
-          {/* Card "Sugerido de mercado" oculto a pedido */}
-          {/* Card "Posicionamento" oculto a pedido */}
-        </div>
-
-        {/* Executive summary */}
+        {/* Resumo executivo */}
         {c.executive_summary && (
-          <div className="flex-1 overflow-hidden">
-            <p className="font-bold mb-2 uppercase tracking-wider" style={{ fontSize: "13px", color: accent, fontWeight: 700 }}>Resumo Executivo</p>
-            <p className="leading-relaxed" style={{ fontSize: "19px", color: textMuted, lineHeight: "1.6" }}>{c.executive_summary}</p>
+          <div className="flex-1 overflow-hidden p-6 rounded-lg" style={{ backgroundColor: neutral, borderLeft: `4px solid ${accent}` }}>
+            <p className="font-bold mb-2 uppercase tracking-widest" style={{ fontSize: "12px", color: accent, fontWeight: 700 }}>Resumo Executivo</p>
+            <p className="leading-relaxed" style={{ fontSize: "18px", color: textMuted, lineHeight: "1.6" }}>{c.executive_summary}</p>
           </div>
         )}
       </div>
