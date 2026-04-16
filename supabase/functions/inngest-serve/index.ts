@@ -184,7 +184,7 @@ function buildPortalNativeUrl(property: PropertyData, portal: PortalInfo): strin
     case "zap":
       return null; // ZAP não aceita o formato de URL com +, retorna showcase de RJ
     case "vivareal":
-      return `https://www.vivareal.com.br/${purposeSlug}/${state}/${city}/${neighborhood}/${typeSlug}_residencial/`;
+      return null; // Viva Real redireciona para showcase do RJ com esse formato de URL
     case "olx":
       return null; // OLX não suporta filtro por cidade via URL — usar apenas Google Search
     case "imovelweb":
