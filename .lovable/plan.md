@@ -1,32 +1,31 @@
 
 
-# Timeout Automático para Estudos Travados
+# Re-executar Estudo Alphaville Nova Esplanada
 
-## O que já existe
-- Função `expire_stuck_studies()` no banco que marca estudos em `processing` há mais de 15 minutos como `failed`.
+## Problema Atual
+Os logs mostram `"batches de 5"` — a versão antiga do `inngest-serve` ainda está deployada. O código no repositório já tem as correções (batch size 2, truncation 8000 chars, MAX_AI_PAGES 15), mas a edge function não foi re-deployada.
 
-## O que falta
-Criar um cron job que chame essa função periodicamente.
+O estudo está novamente em `processing/extracting` e vai travar até o cron job marcá-lo como `failed` em ~15 minutos.
 
 ## Passos
 
-### 1. Migration SQL
-- Habilitar extensões `pg_cron` e `pg_net`
-- Criar cron job que executa `SELECT expire_stuck_studies()` a cada 5 minutos
+### 1. Redeployar `inngest-serve`
+Forçar deploy da edge function para que as correções de batch size e truncation entrem em efeito.
 
+### 2. Marcar estudo como `failed`
+Migration para resetar o estudo:
 ```sql
-CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
-CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
-
-SELECT cron.schedule(
-  'expire-stuck-market-studies',
-  '*/5 * * * *',
-  $$SELECT public.expire_stuck_studies()$$
-);
+UPDATE market_studies 
+SET status = 'failed', current_phase = NULL, updated_at = now() 
+WHERE id = '6d8fce3e-cc62-481e-8691-9a9fe6fa1e0c';
 ```
 
-### Impacto
-- Nenhuma mudança de código frontend ou edge functions
-- Estudos travados serão automaticamente marcados como `failed` a cada 5 minutos
-- O botão "Tentar novamente" aparecerá automaticamente na listagem
+### 3. Retry via UI
+Após deploy + reset, o botão "Tentar novamente" aparece na listagem. O usuário clica para re-executar com a versão corrigida.
+
+## Validação
+Verificar nos logs que:
+- `"batches de 2"` aparece (não 5)
+- Cada batch completa sem shutdown
+- Status final = `completed`
 
