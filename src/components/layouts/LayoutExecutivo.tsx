@@ -174,13 +174,7 @@ export function LayoutExecutivo({ section, branding, theme, colors }: Props) {
               {ownerPpsm && <p className="mt-1" style={{ fontSize: "15px", color: textMuted }}>R$ {Math.round(ownerPpsm).toLocaleString("pt-BR")}/m²</p>}
             </div>
           )}
-          {marketPrice && (
-            <div className="p-5 rounded-lg" style={{ backgroundColor: accent + "10", border: `2px solid ${accent}` }}>
-              <p className="font-medium mb-2 uppercase tracking-wider" style={{ fontSize: "13px", color: accent, fontWeight: 700 }}>Sugerido de mercado</p>
-              <p className="font-bold" style={{ fontSize: "28px", color: accent }}>{fmt(marketPrice)}</p>
-              {c.avg_price_per_sqm && <p className="mt-1" style={{ fontSize: "15px", color: textMuted }}>R$ {Math.round(c.avg_price_per_sqm).toLocaleString("pt-BR")}/m² médio</p>}
-            </div>
-          )}
+          {/* Card "Sugerido de mercado" oculto a pedido */}
           {diffPct != null && (
             <div className="p-5 rounded-lg" style={{ backgroundColor: neutral }}>
               <p className="font-medium mb-2 uppercase tracking-wider" style={{ fontSize: "13px", color: colors.textLight, fontWeight: 600 }}>Posicionamento</p>
