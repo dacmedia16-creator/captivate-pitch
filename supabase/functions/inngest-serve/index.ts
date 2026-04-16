@@ -730,12 +730,28 @@ async function scoreAndSave(
         const price = comp.price ?? 0;
         if (price <= 0) continue;
         const adjs: any[] = [];
+        // Suites adjustment
         const ss2 = subProp.suites ?? 0, cs2 = comp.suites ?? 0;
-        if (ss2 !== cs2) { const d = cs2 - ss2, p = 2 * Math.abs(d); adjs.push({ comparable_id: comp.id, adjustment_type: "suites", label: `Suítes (${d > 0 ? "+" : ""}${d})`, percentage: d > 0 ? p : -p, value: Math.round(price * (p / 100) * (d > 0 ? 1 : -1)), direction: d > 0 ? "positive" : "negative" }); }
+        if (ss2 !== cs2) { const d = cs2 - ss2, p = (adjW.master_suite || 2) * Math.abs(d); adjs.push({ comparable_id: comp.id, adjustment_type: "suites", label: `Suítes (${d > 0 ? "+" : ""}${d})`, percentage: d > 0 ? p : -p, value: Math.round(price * (p / 100) * (d > 0 ? 1 : -1)), direction: d > 0 ? "positive" : "negative" }); }
+        // Parking adjustment
         const sp2 = subProp.parking_spots ?? 0, cp2 = comp.parking_spots ?? 0;
-        if (sp2 !== cp2) { const d = cp2 - sp2, p = 1.5 * Math.abs(d); adjs.push({ comparable_id: comp.id, adjustment_type: "parking", label: `Vagas (${d > 0 ? "+" : ""}${d})`, percentage: d > 0 ? p : -p, value: Math.round(price * (p / 100) * (d > 0 ? 1 : -1)), direction: d > 0 ? "positive" : "negative" }); }
+        if (sp2 !== cp2) { const d = cp2 - sp2, p = (adjW.extra_parking || 1.5) * Math.abs(d); adjs.push({ comparable_id: comp.id, adjustment_type: "parking", label: `Vagas (${d > 0 ? "+" : ""}${d})`, percentage: d > 0 ? p : -p, value: Math.round(price * (p / 100) * (d > 0 ? 1 : -1)), direction: d > 0 ? "positive" : "negative" }); }
+        // Area adjustment
         const sa2 = subProp.area_land ?? subProp.area_built ?? subProp.area_useful ?? 0, ca2 = comp.area ?? 0;
-        if (sa2 > 0 && ca2 > 0 && sa2 !== ca2) { const dp = ((ca2 - sa2) / sa2) * 100; if (Math.abs(dp) > 5) { const ap = Math.min(Math.abs(dp) * 0.15, 9); adjs.push({ comparable_id: comp.id, adjustment_type: "area", label: `Área (${dp > 0 ? "+" : ""}${dp.toFixed(0)}%)`, percentage: dp > 0 ? ap : -ap, value: Math.round(price * (ap / 100) * (dp > 0 ? 1 : -1)), direction: dp > 0 ? "positive" : "negative" }); } }
+        if (sa2 > 0 && ca2 > 0 && sa2 !== ca2) { const dp = ((ca2 - sa2) / sa2) * 100; if (Math.abs(dp) > 5) { const ap = Math.min(Math.abs(dp) * 0.15, (adjW.larger_land || 3) * 3); adjs.push({ comparable_id: comp.id, adjustment_type: "area", label: `Área (${dp > 0 ? "+" : ""}${dp.toFixed(0)}%)`, percentage: dp > 0 ? ap : -ap, value: Math.round(price * (ap / 100) * (dp > 0 ? 1 : -1)), direction: dp > 0 ? "positive" : "negative" }); } }
+        // Conservation state adjustment
+        const subCons = CONSERVATION_LEVELS[(subProp.conservation_state || "").trim().toLowerCase()] ?? 3;
+        const compCons = CONSERVATION_LEVELS[(comp.construction_standard || comp.conservation_state || "").trim().toLowerCase()] ?? 3;
+        if (subCons !== compCons) { const d = compCons - subCons, p = (adjW.better_conservation || 5) * Math.abs(d) * 0.5; adjs.push({ comparable_id: comp.id, adjustment_type: "conservation", label: `Conservação`, percentage: d > 0 ? p : -p, value: Math.round(price * (p / 100) * (d > 0 ? 1 : -1)), direction: d > 0 ? "positive" : "negative" }); }
+        // Construction standard adjustment
+        const subStd = STANDARD_LEVELS[(subProp.construction_standard || "").trim().toLowerCase()] ?? 3;
+        const compStd = STANDARD_LEVELS[(comp.construction_standard || "").trim().toLowerCase()] ?? 3;
+        if (subStd !== compStd) { const d = compStd - subStd, p = 5 * Math.abs(d) * 0.5; adjs.push({ comparable_id: comp.id, adjustment_type: "standard", label: `Padrão construtivo`, percentage: d > 0 ? p : -p, value: Math.round(price * (p / 100) * (d > 0 ? 1 : -1)), direction: d > 0 ? "positive" : "negative" }); }
+        // Differential-based adjustments (pool, gourmet_area, privileged_view, premium_location)
+        const subDiffs = subProp.differentials || [];
+        const compDiffs = (comp.raw_data as any)?.differentials || [];
+        const diffChecks: [string, string, number][] = [["piscina", "Piscina", adjW.pool || 4], ["area_gourmet", "Área Gourmet", adjW.gourmet_area || 2.5], ["vista_privilegiada", "Vista Privilegiada", adjW.privileged_view || 4], ["localizacao_premium", "Localização Premium", adjW.premium_location || 3]];
+        for (const [key, label, pct] of diffChecks) { const subHas = hasDiff(subDiffs, key), compHas = hasDiff(compDiffs, key); if (subHas !== compHas) { const sign = compHas ? 1 : -1; adjs.push({ comparable_id: comp.id, adjustment_type: key, label, percentage: pct * sign, value: Math.round(price * (pct / 100) * sign), direction: compHas ? "positive" : "negative" }); } }
         const tot = adjs.reduce((s: number, a: any) => s + a.value, 0);
         adjPrices.push({ id: comp.id, adjusted_price: Math.round(price + tot) });
         allAdj.push(...adjs);
