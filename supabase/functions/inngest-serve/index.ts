@@ -320,7 +320,7 @@ async function collectUrls(
       const listingUrls = pattern ? links.filter(l => pattern.test(l)) : [];
       console.log(`[INNGEST][FASE 1A] ${portal.name}: ${links.length} links, ${listingUrls.length} anúncios`);
       if (listingUrls.length > 0) {
-        return { urls: [...new Set(listingUrls)].slice(0, 20).map(url => ({ url, title: "", portal, snippet: "native-scrape" })), limitation: null };
+        return { urls: [...new Set(listingUrls)].slice(0, 30).map(url => ({ url, title: "", portal, snippet: "native-scrape" })), limitation: null };
       }
       if (markdown.length > 200) {
         try {
