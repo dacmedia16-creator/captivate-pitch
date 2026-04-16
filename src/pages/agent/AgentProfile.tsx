@@ -32,6 +32,9 @@ interface BrokerData {
   vgv_summary: string;
   preferred_tone: string;
   preferred_layout: string;
+  portfolio_images: any[];
+  personal_results: any[];
+  personal_testimonials: any[];
 }
 
 export default function AgentProfile() {
