@@ -103,6 +103,13 @@ export async function generatePresentationSections({ presentationId, tenantId, b
   // Fetch market data from official or legacy flow
   const { comparables, report } = presentation ? await fetchMarketData(presentation) : { comparables: [], report: null };
 
+  // Fetch subject property if market_study_id exists
+  let subjectProperty: any = null;
+  if (presentation?.market_study_id) {
+    const { data } = await supabase.from("market_study_subject_properties").select("*").eq("market_study_id", presentation.market_study_id).single();
+    subjectProperty = data;
+  }
+
   const agencyAny = agency as any;
 
   const sections = SECTION_DEFINITIONS.map(def => {
