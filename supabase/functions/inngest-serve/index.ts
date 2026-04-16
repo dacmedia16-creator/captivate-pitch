@@ -665,19 +665,19 @@ async function scoreAndSave(
     const cc = (c.condominium || "").toLowerCase(), sc = (property.condominium || "").toLowerCase();
     const sameCondo = sc && cc && (cc.includes(sc) || sc.includes(cc));
     let score = 0;
-    if (sameCondo) score += 25;
-    if (c.neighborhood && property.neighborhood) { const cn = c.neighborhood.toLowerCase(), sn = property.neighborhood.toLowerCase(); if (cn.includes(sn) || sn.includes(cn)) score += 20; }
-    if (c.property_type && property.property_type && c.property_type.toLowerCase().includes(property.property_type.toLowerCase())) score += 15;
+    if (sameCondo) score += simW.same_condominium;
+    if (c.neighborhood && property.neighborhood) { const cn = c.neighborhood.toLowerCase(), sn = property.neighborhood.toLowerCase(); if (cn.includes(sn) || sn.includes(cn)) score += simW.same_neighborhood; }
+    if (c.property_type && property.property_type && c.property_type.toLowerCase().includes(property.property_type.toLowerCase())) score += simW.same_type;
     const ad = Math.abs(c.area - baseArea) / baseArea;
-    if (ad <= 0.05) score += 15; else if (ad <= 0.10) score += 12; else if (ad <= 0.20) score += 8; else if (ad <= 0.30) score += 3;
+    if (ad <= 0.05) score += simW.area_range; else if (ad <= 0.10) score += Math.round(simW.area_range * 0.8); else if (ad <= 0.20) score += Math.round(simW.area_range * 0.53); else if (ad <= 0.30) score += Math.round(simW.area_range * 0.2);
     const bd = Math.abs((c.bedrooms || 0) - baseBed), sd = Math.abs((c.suites || 0) - baseSu), pd = Math.abs((c.parking_spots || 0) - basePk);
     const avg = (bd + sd + pd) / 3;
-    if (avg === 0) score += 10; else if (avg <= 1) score += 6; else if (avg <= 2) score += 2;
+    if (avg === 0) score += simW.rooms_proximity; else if (avg <= 1) score += Math.round(simW.rooms_proximity * 0.6); else if (avg <= 2) score += Math.round(simW.rooms_proximity * 0.2);
     const ss = ((property as any).construction_standard || (property as any).property_standard || "").toLowerCase();
-    if (c.construction_standard && ss && (c.construction_standard.toLowerCase().includes(ss) || ss.includes(c.construction_standard.toLowerCase()))) score += 10;
+    if (c.construction_standard && ss && (c.construction_standard.toLowerCase().includes(ss) || ss.includes(c.construction_standard.toLowerCase()))) score += simW.same_standard;
     const subD: string[] = (property as any).differentials || [], compD: string[] = c.differentials || [];
-    if (subD.length > 0 && compD.length > 0) { const sn2 = subD.map((d: string) => d.toLowerCase()), cn2 = compD.map((d: string) => d.toLowerCase()); const ol = sn2.filter((d: string) => cn2.some((cd: string) => cd.includes(d) || d.includes(cd))); const r = ol.length / sn2.length; if (r >= 0.5) score += 5; else if (r >= 0.25) score += 3; }
-    if (c.city && property.city) { if (c.city.toLowerCase().includes(property.city.toLowerCase()) || property.city.toLowerCase().includes(c.city.toLowerCase())) score += 5; }
+    if (subD.length > 0 && compD.length > 0) { const sn2 = subD.map((d: string) => d.toLowerCase()), cn2 = compD.map((d: string) => d.toLowerCase()); const ol = sn2.filter((d: string) => cn2.some((cd: string) => cd.includes(d) || d.includes(cd))); const r = ol.length / sn2.length; if (r >= 0.5) score += simW.same_profile; else if (r >= 0.25) score += Math.round(simW.same_profile * 0.6); }
+    if (c.city && property.city) { if (c.city.toLowerCase().includes(property.city.toLowerCase()) || property.city.toLowerCase().includes(c.city.toLowerCase())) score += simW.same_profile; }
     const sim = Math.min(100, Math.round(score));
     const minSim = (filters?.preferSameCondominium && property.condominium) ? 25 : 30;
     if (sim < minSim) { localDiscards.push({ url: c.source_url || "?", portal: c.source_name || "?", reason: `Similaridade ${sim}/100` }); continue; }
