@@ -110,7 +110,7 @@ export function LayoutExecutivo({ section, branding, theme, colors }: Props) {
   }
 
   /* ═══════ MARKET STUDY — SLIDE 1: PARECER DE AVALIAÇÃO ═══════ */
-  if ((section.section_key === "market_study_subject" || section.section_key === "market_study_placeholder") && c.status === "completed") {
+  if (section.section_key === "market_study_subject" && c.status === "completed") {
     const sp = c.subject_property;
     const confidenceMap: Record<string, { label: string; color: string }> = {
       high: { label: "Alta", color: "#16A34A" },

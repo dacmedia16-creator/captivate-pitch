@@ -187,7 +187,7 @@ Gere os textos para cada seção da apresentação.`;
     const sectionUpdates: Record<string, any> = {
       property_summary: generated.property_summary,
       broker_intro: generated.broker_intro,
-      market_study_placeholder: generated.market_analysis,
+      
       pricing_scenarios: generated.pricing_scenarios,
       closing: generated.closing,
     };
