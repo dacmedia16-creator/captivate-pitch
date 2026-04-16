@@ -620,7 +620,7 @@ function scoreAndFilter(
   portalResults: PortalResult[], discardReasons: DiscardReason[],
   limitations: string[], totalUrlsFound: number, listingsOpened: number,
 ) {
-  const maxResults = Math.min(Number(filters.maxComparables) || 15, 20);
+  const maxResults = Math.min(Number(filters.maxComparables) || 15, 30);
   const baseArea = Number(property.area_total || property.area_built || property.area_land) || 100;
   const baseBed = Number(property.bedrooms) || 3, baseSu = Number(property.suites) || 0, basePk = Number(property.parking_spots) || 0;
   const validComparables: any[] = [];
