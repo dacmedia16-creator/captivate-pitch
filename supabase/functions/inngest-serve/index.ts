@@ -584,6 +584,33 @@ IMÓVEL DE REFERÊNCIA: Tipo: ${property.property_type || "?"}, Bairro: ${proper
 }
 
 // ============================================================
+// Default weights (match market_study_settings DB defaults)
+// ============================================================
+const DEFAULT_SIM_WEIGHTS = {
+  same_condominium: 25, same_neighborhood: 20, same_type: 15,
+  area_range: 15, rooms_proximity: 10, same_standard: 10, same_profile: 5,
+};
+const DEFAULT_ADJ_WEIGHTS = {
+  pool: 4, gourmet_area: 2.5, master_suite: 2, extra_parking: 1.5,
+  better_conservation: 5, newer_building: 3, privileged_view: 4,
+  premium_location: 3, larger_land: 3,
+};
+
+const CONSERVATION_LEVELS: Record<string, number> = {
+  novo: 5, excelente: 4, bom: 3, regular: 2, "necessita reforma": 1, ruim: 1,
+};
+const STANDARD_LEVELS: Record<string, number> = {
+  "alto luxo": 5, alto: 4, medio: 3, "médio": 3, popular: 2, economico: 1, "econômico": 1,
+};
+
+function hasDiff(diffs: any, key: string): boolean {
+  if (!diffs) return false;
+  if (Array.isArray(diffs)) return diffs.some((d: string) => d.toLowerCase().includes(key));
+  if (typeof diffs === "object") return !!diffs[key];
+  return false;
+}
+
+// ============================================================
 // Step 4: scoreAndSave — Score, filter, persist to DB
 // ============================================================
 async function scoreAndSave(
@@ -596,6 +623,23 @@ async function scoreAndSave(
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const maxResults = Math.min(Number(filters.maxComparables) || 15, 20);
+
+  // Fetch tenant settings for dynamic weights
+  let simW = DEFAULT_SIM_WEIGHTS;
+  let adjW = DEFAULT_ADJ_WEIGHTS;
+  if (marketStudyId) {
+    try {
+      const { data: study } = await supabase.from("market_studies").select("tenant_id").eq("id", marketStudyId).single();
+      if (study?.tenant_id) {
+        const { data: settings } = await supabase.from("market_study_settings").select("similarity_weights, adjustment_weights").eq("tenant_id", study.tenant_id).limit(1);
+        if (settings?.[0]) {
+          simW = { ...DEFAULT_SIM_WEIGHTS, ...(settings[0].similarity_weights as any || {}) };
+          adjW = { ...DEFAULT_ADJ_WEIGHTS, ...(settings[0].adjustment_weights as any || {}) };
+          console.log("[INNGEST][FASE 3] Using tenant weights from market_study_settings");
+        }
+      }
+    } catch (e) { console.warn("[INNGEST][FASE 3] Failed to load tenant weights, using defaults:", e); }
+  }
 
   // Score + filter
   const baseArea = Number(property.area_total || property.area_built || property.area_land) || 100;
@@ -621,19 +665,19 @@ async function scoreAndSave(
     const cc = (c.condominium || "").toLowerCase(), sc = (property.condominium || "").toLowerCase();
     const sameCondo = sc && cc && (cc.includes(sc) || sc.includes(cc));
     let score = 0;
-    if (sameCondo) score += 25;
-    if (c.neighborhood && property.neighborhood) { const cn = c.neighborhood.toLowerCase(), sn = property.neighborhood.toLowerCase(); if (cn.includes(sn) || sn.includes(cn)) score += 20; }
-    if (c.property_type && property.property_type && c.property_type.toLowerCase().includes(property.property_type.toLowerCase())) score += 15;
+    if (sameCondo) score += simW.same_condominium;
+    if (c.neighborhood && property.neighborhood) { const cn = c.neighborhood.toLowerCase(), sn = property.neighborhood.toLowerCase(); if (cn.includes(sn) || sn.includes(cn)) score += simW.same_neighborhood; }
+    if (c.property_type && property.property_type && c.property_type.toLowerCase().includes(property.property_type.toLowerCase())) score += simW.same_type;
     const ad = Math.abs(c.area - baseArea) / baseArea;
-    if (ad <= 0.05) score += 15; else if (ad <= 0.10) score += 12; else if (ad <= 0.20) score += 8; else if (ad <= 0.30) score += 3;
+    if (ad <= 0.05) score += simW.area_range; else if (ad <= 0.10) score += Math.round(simW.area_range * 0.8); else if (ad <= 0.20) score += Math.round(simW.area_range * 0.53); else if (ad <= 0.30) score += Math.round(simW.area_range * 0.2);
     const bd = Math.abs((c.bedrooms || 0) - baseBed), sd = Math.abs((c.suites || 0) - baseSu), pd = Math.abs((c.parking_spots || 0) - basePk);
     const avg = (bd + sd + pd) / 3;
-    if (avg === 0) score += 10; else if (avg <= 1) score += 6; else if (avg <= 2) score += 2;
+    if (avg === 0) score += simW.rooms_proximity; else if (avg <= 1) score += Math.round(simW.rooms_proximity * 0.6); else if (avg <= 2) score += Math.round(simW.rooms_proximity * 0.2);
     const ss = ((property as any).construction_standard || (property as any).property_standard || "").toLowerCase();
-    if (c.construction_standard && ss && (c.construction_standard.toLowerCase().includes(ss) || ss.includes(c.construction_standard.toLowerCase()))) score += 10;
+    if (c.construction_standard && ss && (c.construction_standard.toLowerCase().includes(ss) || ss.includes(c.construction_standard.toLowerCase()))) score += simW.same_standard;
     const subD: string[] = (property as any).differentials || [], compD: string[] = c.differentials || [];
-    if (subD.length > 0 && compD.length > 0) { const sn2 = subD.map((d: string) => d.toLowerCase()), cn2 = compD.map((d: string) => d.toLowerCase()); const ol = sn2.filter((d: string) => cn2.some((cd: string) => cd.includes(d) || d.includes(cd))); const r = ol.length / sn2.length; if (r >= 0.5) score += 5; else if (r >= 0.25) score += 3; }
-    if (c.city && property.city) { if (c.city.toLowerCase().includes(property.city.toLowerCase()) || property.city.toLowerCase().includes(c.city.toLowerCase())) score += 5; }
+    if (subD.length > 0 && compD.length > 0) { const sn2 = subD.map((d: string) => d.toLowerCase()), cn2 = compD.map((d: string) => d.toLowerCase()); const ol = sn2.filter((d: string) => cn2.some((cd: string) => cd.includes(d) || d.includes(cd))); const r = ol.length / sn2.length; if (r >= 0.5) score += simW.same_profile; else if (r >= 0.25) score += Math.round(simW.same_profile * 0.6); }
+    if (c.city && property.city) { if (c.city.toLowerCase().includes(property.city.toLowerCase()) || property.city.toLowerCase().includes(c.city.toLowerCase())) score += simW.same_profile; }
     const sim = Math.min(100, Math.round(score));
     const minSim = (filters?.preferSameCondominium && property.condominium) ? 25 : 30;
     if (sim < minSim) { localDiscards.push({ url: c.source_url || "?", portal: c.source_name || "?", reason: `Similaridade ${sim}/100` }); continue; }
@@ -686,12 +730,28 @@ async function scoreAndSave(
         const price = comp.price ?? 0;
         if (price <= 0) continue;
         const adjs: any[] = [];
+        // Suites adjustment
         const ss2 = subProp.suites ?? 0, cs2 = comp.suites ?? 0;
-        if (ss2 !== cs2) { const d = cs2 - ss2, p = 2 * Math.abs(d); adjs.push({ comparable_id: comp.id, adjustment_type: "suites", label: `Suítes (${d > 0 ? "+" : ""}${d})`, percentage: d > 0 ? p : -p, value: Math.round(price * (p / 100) * (d > 0 ? 1 : -1)), direction: d > 0 ? "positive" : "negative" }); }
+        if (ss2 !== cs2) { const d = cs2 - ss2, p = (adjW.master_suite || 2) * Math.abs(d); adjs.push({ comparable_id: comp.id, adjustment_type: "suites", label: `Suítes (${d > 0 ? "+" : ""}${d})`, percentage: d > 0 ? p : -p, value: Math.round(price * (p / 100) * (d > 0 ? 1 : -1)), direction: d > 0 ? "positive" : "negative" }); }
+        // Parking adjustment
         const sp2 = subProp.parking_spots ?? 0, cp2 = comp.parking_spots ?? 0;
-        if (sp2 !== cp2) { const d = cp2 - sp2, p = 1.5 * Math.abs(d); adjs.push({ comparable_id: comp.id, adjustment_type: "parking", label: `Vagas (${d > 0 ? "+" : ""}${d})`, percentage: d > 0 ? p : -p, value: Math.round(price * (p / 100) * (d > 0 ? 1 : -1)), direction: d > 0 ? "positive" : "negative" }); }
+        if (sp2 !== cp2) { const d = cp2 - sp2, p = (adjW.extra_parking || 1.5) * Math.abs(d); adjs.push({ comparable_id: comp.id, adjustment_type: "parking", label: `Vagas (${d > 0 ? "+" : ""}${d})`, percentage: d > 0 ? p : -p, value: Math.round(price * (p / 100) * (d > 0 ? 1 : -1)), direction: d > 0 ? "positive" : "negative" }); }
+        // Area adjustment
         const sa2 = subProp.area_land ?? subProp.area_built ?? subProp.area_useful ?? 0, ca2 = comp.area ?? 0;
-        if (sa2 > 0 && ca2 > 0 && sa2 !== ca2) { const dp = ((ca2 - sa2) / sa2) * 100; if (Math.abs(dp) > 5) { const ap = Math.min(Math.abs(dp) * 0.15, 9); adjs.push({ comparable_id: comp.id, adjustment_type: "area", label: `Área (${dp > 0 ? "+" : ""}${dp.toFixed(0)}%)`, percentage: dp > 0 ? ap : -ap, value: Math.round(price * (ap / 100) * (dp > 0 ? 1 : -1)), direction: dp > 0 ? "positive" : "negative" }); } }
+        if (sa2 > 0 && ca2 > 0 && sa2 !== ca2) { const dp = ((ca2 - sa2) / sa2) * 100; if (Math.abs(dp) > 5) { const ap = Math.min(Math.abs(dp) * 0.15, (adjW.larger_land || 3) * 3); adjs.push({ comparable_id: comp.id, adjustment_type: "area", label: `Área (${dp > 0 ? "+" : ""}${dp.toFixed(0)}%)`, percentage: dp > 0 ? ap : -ap, value: Math.round(price * (ap / 100) * (dp > 0 ? 1 : -1)), direction: dp > 0 ? "positive" : "negative" }); } }
+        // Conservation state adjustment
+        const subCons = CONSERVATION_LEVELS[(subProp.conservation_state || "").trim().toLowerCase()] ?? 3;
+        const compCons = CONSERVATION_LEVELS[(comp.construction_standard || comp.conservation_state || "").trim().toLowerCase()] ?? 3;
+        if (subCons !== compCons) { const d = compCons - subCons, p = (adjW.better_conservation || 5) * Math.abs(d) * 0.5; adjs.push({ comparable_id: comp.id, adjustment_type: "conservation", label: `Conservação`, percentage: d > 0 ? p : -p, value: Math.round(price * (p / 100) * (d > 0 ? 1 : -1)), direction: d > 0 ? "positive" : "negative" }); }
+        // Construction standard adjustment
+        const subStd = STANDARD_LEVELS[(subProp.construction_standard || "").trim().toLowerCase()] ?? 3;
+        const compStd = STANDARD_LEVELS[(comp.construction_standard || "").trim().toLowerCase()] ?? 3;
+        if (subStd !== compStd) { const d = compStd - subStd, p = 5 * Math.abs(d) * 0.5; adjs.push({ comparable_id: comp.id, adjustment_type: "standard", label: `Padrão construtivo`, percentage: d > 0 ? p : -p, value: Math.round(price * (p / 100) * (d > 0 ? 1 : -1)), direction: d > 0 ? "positive" : "negative" }); }
+        // Differential-based adjustments (pool, gourmet_area, privileged_view, premium_location)
+        const subDiffs = subProp.differentials || [];
+        const compDiffs = (comp.raw_data as any)?.differentials || [];
+        const diffChecks: [string, string, number][] = [["piscina", "Piscina", adjW.pool || 4], ["area_gourmet", "Área Gourmet", adjW.gourmet_area || 2.5], ["vista_privilegiada", "Vista Privilegiada", adjW.privileged_view || 4], ["localizacao_premium", "Localização Premium", adjW.premium_location || 3]];
+        for (const [key, label, pct] of diffChecks) { const subHas = hasDiff(subDiffs, key), compHas = hasDiff(compDiffs, key); if (subHas !== compHas) { const sign = compHas ? 1 : -1; adjs.push({ comparable_id: comp.id, adjustment_type: key, label, percentage: pct * sign, value: Math.round(price * (pct / 100) * sign), direction: compHas ? "positive" : "negative" }); } }
         const tot = adjs.reduce((s: number, a: any) => s + a.value, 0);
         adjPrices.push({ id: comp.id, adjusted_price: Math.round(price + tot) });
         allAdj.push(...adjs);
