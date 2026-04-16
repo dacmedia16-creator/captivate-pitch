@@ -59,6 +59,9 @@ export default function AgentProfile() {
     vgv_summary: "",
     preferred_tone: "",
     preferred_layout: "",
+    portfolio_images: [],
+    personal_results: [],
+    personal_testimonials: [],
   });
 
   useEffect(() => {
