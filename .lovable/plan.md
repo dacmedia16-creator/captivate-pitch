@@ -1,31 +1,57 @@
 
 
-# Re-executar Estudo Alphaville Nova Esplanada
+# Melhorar Layout de Fotos no Slide Resultados
+
+## Referencia
+A imagem mostra cards de portfolio com: fotos grandes, overlay com tipo do imóvel e localização, badge "VENDIDO em X dias". Layout horizontal com 4 cards de tamanho igual e boa proporção.
 
 ## Problema Atual
-Os logs mostram `"batches de 5"` — a versão antiga do `inngest-serve` ainda está deployada. O código no repositório já tem as correções (batch size 2, truncation 8000 chars, MAX_AI_PAGES 15), mas a edge function não foi re-deployada.
+As 3 layouts (Executivo, Premium, Impacto) usam `flex-1` com `height: 200px` — fotos pequenas, sem sombra, captions básicos com gradient escuro.
 
-O estudo está novamente em `processing/extracting` e vai travar até o cron job marcá-lo como `failed` em ~15 minutos.
+## Solução
+Melhorar o grid de fotos nos 3 layouts com:
 
-## Passos
+1. **Aumentar altura** de 200px para 280px — mais impacto visual
+2. **Adicionar rounded corners + shadow** — cards mais refinados
+3. **Melhorar overlay** — gradient mais suave, caption com fundo semi-transparente tipo card, tipografia melhor (título do imóvel em bold, caption menor abaixo)
+4. **Adicionar numeração/badge** — indicador visual de sequência (1, 2, 3, 4) no canto superior
 
-### 1. Redeployar `inngest-serve`
-Forçar deploy da edge function para que as correções de batch size e truncation entrem em efeito.
+### Arquivos alterados
+- `src/components/layouts/LayoutExecutivo.tsx` — seção results, bloco portfolioImgs (linhas 474-488)
+- `src/components/layouts/LayoutPremium.tsx` — seção results, bloco portfolioImgs (linhas 468-482)
+- `src/components/layouts/LayoutImpactoComercial.tsx` — seção results, bloco portfolioImgs (linhas 159-173)
 
-### 2. Marcar estudo como `failed`
-Migration para resetar o estudo:
-```sql
-UPDATE market_studies 
-SET status = 'failed', current_phase = NULL, updated_at = now() 
-WHERE id = '6d8fce3e-cc62-481e-8691-9a9fe6fa1e0c';
+### Novo layout dos cards (aplicado nos 3 arquivos)
+```tsx
+{portfolioImgs.length > 0 && (
+  <div className="flex gap-4">
+    {portfolioImgs.slice(0, 4).map((img, i) => (
+      <div key={i} className="relative flex-1 overflow-hidden rounded-xl" 
+           style={{ minWidth: 0, height: "280px", boxShadow: "0 4px 20px rgba(0,0,0,0.12)" }}>
+        <img src={img.image_url} alt={img.caption || ""} className="w-full h-full object-cover" />
+        {/* Número no canto */}
+        <div className="absolute top-3 left-3 w-8 h-8 rounded-full flex items-center justify-center"
+             style={{ backgroundColor: accent, color: "#fff", fontSize: "16px", fontWeight: 700 }}>
+          {i + 1}
+        </div>
+        {/* Caption overlay melhorado */}
+        <div className="absolute inset-x-0 bottom-0" 
+             style={{ background: "linear-gradient(transparent, rgba(0,0,0,0.75))" }}>
+          <div className="p-4">
+            {img.caption && (
+              <p className="font-bold leading-tight" 
+                 style={{ fontSize: "20px", color: "#fff" }}>{img.caption}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
 ```
 
-### 3. Retry via UI
-Após deploy + reset, o botão "Tentar novamente" aparece na listagem. O usuário clica para re-executar com a versão corrigida.
-
-## Validação
-Verificar nos logs que:
-- `"batches de 2"` aparece (não 5)
-- Cada batch completa sem shutdown
-- Status final = `completed`
+### Impacto
+- Apenas visual, sem mudanças de schema ou dados
+- Fotos maiores e mais profissionais
+- Consistente nos 3 temas
 
