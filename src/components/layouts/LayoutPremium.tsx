@@ -467,15 +467,20 @@ export function LayoutPremium({ section, branding, theme, colors }: Props) {
           )}
           {/* Portfolio with overlay captions */}
           {portfolioImgs.length > 0 && (
-            <div className="flex gap-3">
+            <div className="flex gap-4">
               {portfolioImgs.slice(0, 4).map((img: any, i: number) => (
-                <div key={i} className="relative flex-1 overflow-hidden rounded-lg" style={{ minWidth: 0, height: "200px" }}>
+                <div key={i} className="relative flex-1 overflow-hidden rounded-xl" style={{ minWidth: 0, height: "280px", boxShadow: "0 4px 20px rgba(0,0,0,0.12)" }}>
                   <img src={img.image_url} alt={img.caption || ""} className="w-full h-full object-cover" />
-                  {img.caption && (
-                    <div className="absolute inset-0 flex items-end" style={{ background: "linear-gradient(transparent 40%, rgba(0,0,0,0.7))" }}>
-                      <p className="p-3 font-bold" style={{ fontSize: "18px", color: "#ffffff" }}>{img.caption}</p>
+                  <div className="absolute top-3 left-3 w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: accent, color: "#fff", fontSize: "16px", fontWeight: 700 }}>
+                    {i + 1}
+                  </div>
+                  <div className="absolute inset-x-0 bottom-0" style={{ background: "linear-gradient(transparent, rgba(0,0,0,0.75))" }}>
+                    <div className="p-4">
+                      {img.caption && (
+                        <p className="font-bold leading-tight" style={{ fontSize: "20px", color: "#fff" }}>{img.caption}</p>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>
