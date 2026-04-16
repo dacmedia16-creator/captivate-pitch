@@ -295,8 +295,8 @@ async function collectUrls(
   }
 
   const limitedPortals = searchablePortals;
-  const maxResults = Math.min(Number(filters.maxComparables) || 15, 20);
-  const resultsPerPortal = Math.max(5, Math.min(Math.ceil((maxResults * 2) / limitedPortals.length), 10));
+  const maxResults = Math.min(Number(filters.maxComparables) || 15, 30);
+  const resultsPerPortal = Math.max(8, Math.min(Math.ceil((maxResults * 3) / limitedPortals.length), 15));
 
   // FASE 1A: Scrape nativo
   console.log(`[INNGEST][FASE 1A] Scraping nativo em ${limitedPortals.length} portais...`);
