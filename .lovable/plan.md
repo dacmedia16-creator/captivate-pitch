@@ -1,63 +1,31 @@
 
 
-# Dividir Estudo de Mercado em 3 Slides
+# Atualizar apresentações já criadas com os 3 slides de estudo de mercado
 
-## Visão geral
+## Problema
+Existem 24 apresentações vinculadas a estudos de mercado concluídos que ainda não têm os 3 novos slides (`market_study_subject`, `market_study_stats`, `market_study_comparables`). O auto-sync atual só roda quando alguém abre o editor.
 
-Atualmente, todo o conteúdo do estudo de mercado (imóvel avaliado, métricas, gráfico e tabela de comparáveis) está comprimido em 1 único slide. Vamos dividir em 3 slides distintos:
-
-1. **Slide 1 — Imóvel Avaliado**: Dados do imóvel (tipo, padrão, conservação, idade, área, quartos, diferenciais)
-2. **Slide 2 — Estatísticas de Mercado**: Métricas (preço médio, mediana, R$/m², total comparáveis) + gráfico de barras
-3. **Slide 3 — Comparáveis**: Tabela detalhada dos comparáveis com preço, m², R$/m², score
+## Solução
+Criar uma edge function `batch-sync-market-slides` que percorre todos os `market_study_id` únicos com status `completed` e chama a mesma lógica de sync para cada um. Depois, invocar a função uma vez.
 
 ## Mudanças
 
-### 1. `useGeneratePresentation.ts` — Criar 3 section_keys
+### 1. Nova edge function `supabase/functions/batch-sync-market-slides/index.ts`
+- Busca todos os `market_studies` com `status = 'completed'` que têm pelo menos uma apresentação vinculada
+- Para cada um, executa a mesma lógica do `syncMarketStudySections`:
+  - Busca `market_study_results`, `market_study_comparables` (approved), `market_study_subject_properties`
+  - Para cada apresentação vinculada, faz upsert das 3 seções + atualiza `pricing_scenarios`
+- Retorna contagem de apresentações atualizadas
+- Autenticação: verifica que o usuário é `super_admin` ou roda com service role key
 
-Substituir o único `market_study_placeholder` (order 11) por 3 novas seções em `SECTION_DEFINITIONS`:
+### 2. Botão no `AdminDashboard.tsx` (opcional)
+- Adicionar um botão "Sincronizar apresentações" no painel admin que invoca a edge function
+- Mostra loading + toast com resultado
 
-```
-{ key: "market_study_subject", title: "Imóvel Avaliado", order: 11 }
-{ key: "market_study_stats", title: "Estatísticas de Mercado", order: 12 }
-{ key: "market_study_comparables", title: "Comparáveis de Mercado", order: 13 }
-```
-
-Ajustar `pricing_scenarios` para order 14, `required_documentation` 15, `closing` 16.
-
-No `switch`, as 3 novas seções compartilham os mesmos dados (report, comparables, subjectProperty), cada uma com o conteúdo completo para que o layout decida o que renderizar.
-
-### 2. `syncMarketStudySections.ts` — Sincronizar 3 seções
-
-Atualizar para fazer upsert nas 3 novas section_keys (`market_study_subject`, `market_study_stats`, `market_study_comparables`) em vez do antigo `market_study_placeholder`.
-
-### 3. Layouts (3 arquivos) — Renderizar 3 slides separados
-
-Em cada layout (`LayoutExecutivo`, `LayoutPremium`, `LayoutImpactoComercial`):
-
-**Slide `market_study_subject`**: Header "Análise de Mercado" + bloco do imóvel avaliado (tipo, padrão, conservação, idade, área, quartos, suítes, vagas, banheiros, diferenciais). Mais espaço para detalhes.
-
-**Slide `market_study_stats`**: Header "Estatísticas de Mercado" + MarketStats (4 métricas grandes) + MarketPriceBarChart (gráfico expandido, não compact). Com referência do preço pretendido.
-
-**Slide `market_study_comparables`**: Header "Comparáveis" + tabela completa com todos os comparáveis (sem limit de 8), com colunas: título, preço, m², R$/m², score.
-
-Remover o bloco antigo `market_study_placeholder` dos 3 layouts.
-
-### 4. `PresentationEditor.tsx` — Atualizar auto-sync
-
-O `useEffect` que verifica `market_study_placeholder` deve agora verificar `market_study_subject` como indicador de seção de mercado.
-
-### 5. Retrocompatibilidade
-
-Manter suporte ao antigo `market_study_placeholder` nos layouts (fallback) para apresentações existentes que ainda não foram re-sincronizadas. Quando o editor abre, o auto-sync criará as 3 novas seções.
-
-## Arquivos alterados
+## Arquivos
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/hooks/useGeneratePresentation.ts` | 3 section_keys + reordenar |
-| `src/hooks/syncMarketStudySections.ts` | Sync para 3 seções |
-| `src/components/layouts/LayoutExecutivo.tsx` | 3 blocos de slide |
-| `src/components/layouts/LayoutPremium.tsx` | 3 blocos de slide |
-| `src/components/layouts/LayoutImpactoComercial.tsx` | 3 blocos de slide |
-| `src/pages/agent/PresentationEditor.tsx` | Ajustar auto-sync key |
+| `supabase/functions/batch-sync-market-slides/index.ts` | Nova edge function com lógica de batch sync |
+| `src/pages/admin/AdminDashboard.tsx` | Botão para disparar o batch sync |
 
