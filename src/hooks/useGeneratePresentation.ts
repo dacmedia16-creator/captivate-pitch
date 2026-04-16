@@ -283,7 +283,6 @@ export async function generatePresentationSections({ presentationId, tenantId, b
         content = {
           owner_expected_price: presentation?.owner_expected_price,
           scenarios: [
-            { label: "Preço aspiracional", value: report?.suggested_ad_price || report?.suggested_aspirational_price || null },
             { label: "Preço de mercado", value: report?.suggested_market_price || null },
             { label: "Preço de venda rápida", value: report?.suggested_fast_sale_price || null },
           ],
