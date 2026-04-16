@@ -1,35 +1,39 @@
 
 
-# ImovelWeb: 30 encontrados, 2 válidos — Análise
+# ZAP Imóveis: 24 encontrados, 5 válidos — Diagnóstico e Correção
 
 ## Diagnóstico
 
-Diferente do OLX e Viva Real (onde a URL nativa estava quebrada), o ImovelWeb **está funcionando corretamente**:
-- A URL nativa `apartamentos-venda-parque-campolim-sorocaba.html` retorna resultados corretos de Sorocaba
-- O regex `/propriedades/` detecta anúncios individuais corretamente
-- Os 30 URLs são coletados com sucesso
+O problema do ZAP é **idêntico ao Viva Real e OLX**: a URL nativa está quebrada.
 
-O problema é que **28 dos 30 comparáveis são descartados na fase de scoring**, provavelmente por:
+A URL gerada é:
+```
+https://www.zapimoveis.com.br/venda/apartamentos/sp+sorocaba+parque-campolim/
+```
 
-1. **Similaridade mínima alta (40/100)** — sem bairro ou cidade no dado extraído pela IA, o comparável perde 20-25 pontos
-2. **AI extraction incompleta** — a IA não extrai `neighborhood` ou `city` de algumas páginas do ImovelWeb, resultando em score baixo
-3. **Área fora da faixa** — comparáveis com metragem muito diferente perdem até 15 pontos
+O ZAP **não reconhece** esse formato e retorna uma **página de erro/showcase** com anúncios aleatórios do **Rio de Janeiro**. Nos discards, todos os URLs do ZAP descartados contêm `?source=showcase%2CERROR+PAGE` e foram marcados como "Outra cidade".
 
-## Correções propostas
+Os 5 válidos vieram exclusivamente do **Google Search** (FASE 1B), que funciona corretamente.
+
+## Correção
 
 ### `supabase/functions/inngest-serve/index.ts`
 
-1. **Inferir cidade/bairro do ImovelWeb pela URL** — URLs do ImovelWeb contêm o bairro no slug (ex: `propriedades/apartamento-a-venda-parque-campolim-3029242645.html`). Adicionar lógica no pós-processamento de AI extraction para preencher `city` e `neighborhood` quando ausentes, usando o contexto da busca (property.city/neighborhood)
+**Desabilitar URL nativa do ZAP** — assim como o OLX, retornar `null` no `buildPortalNativeUrl` para forçar uso apenas do Google Search:
 
-2. **Reduzir similaridade mínima de 40 para 30** — O threshold de 40 é muito restritivo quando a IA não extrai todos os campos. Com 30, comparáveis que têm preço+área compatíveis mas faltam dados de localização ainda passam
+```typescript
+case "zap":
+  return null; // ZAP não aceita o formato de URL com +, retorna showcase de RJ
+```
 
-3. **Melhorar prompt de extração para ImovelWeb** — Adicionar instrução explícita para extrair bairro e cidade do título e endereço das páginas do ImovelWeb
+Isso elimina ~19 URLs inúteis (showcase do RJ) e evita gastar créditos Firecrawl em páginas de erro. Os resultados de Google Search já trazem 5+ válidos e com o threshold de 30 e a inferência de bairro (já implementados), devem passar mais.
 
 ## Impacto esperado
-- De ~2 válidos para ~8-15 válidos do ImovelWeb
-- Sem afetar qualidade (comparáveis ruins ainda serão filtrados por preço/área/duplicata)
+- Elimina desperdício de créditos Firecrawl no scrape nativo do ZAP
+- Mantém os ~5 válidos do Google Search
+- Possível aumento marginal pois sem as URLs de showcase poluindo o pipeline, há mais "slots" para URLs válidas do Google
 
 ## Escopo
-- 1 arquivo editado (3 alterações)
+- 1 linha alterada em `inngest-serve/index.ts`
 - Redeploy de 1 edge function
 
