@@ -790,7 +790,7 @@ async function scoreAndSave(
         if (lr) {
           for (const p of lp) {
             await Promise.all([
-              supabase.from("presentation_sections").update({ content: { owner_expected_price: p.owner_expected_price, scenarios: [{ label: "Preço aspiracional", value: lr.suggested_ad_price || null }, { label: "Preço de mercado", value: lr.suggested_market_price || null }, { label: "Preço de venda rápida", value: lr.suggested_fast_sale_price || null }] } }).eq("presentation_id", p.id).eq("section_key", "pricing_scenarios"),
+              supabase.from("presentation_sections").update({ content: { owner_expected_price: p.owner_expected_price, scenarios: [{ label: "Preço de mercado", value: lr.suggested_market_price || null }, { label: "Preço de venda rápida", value: lr.suggested_fast_sale_price || null }] } }).eq("presentation_id", p.id).eq("section_key", "pricing_scenarios"),
             ]);
           }
           console.log(`[INNGEST][SYNC] ${lp.length} presentation(s) updated`);

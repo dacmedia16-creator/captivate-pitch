@@ -87,8 +87,8 @@ serve(async (req) => {
       const title = s.title || s.section_key;
 
       if (s.section_key === "pricing_scenarios" && content.scenarios) {
-        const colors = ["#dc2626", pc, "#16a34a"];
-        const labels = ["Venda Acelerada", "Preço de Mercado", "Aspiracional"];
+        const colors = [pc, "#16a34a"];
+        const labels = ["Preço de Mercado", "Venda Acelerada"];
         const scenarioCards = (content.scenarios || []).map((sc: any, i: number) => `
           <div style="flex:1;padding:24px 16px;text-align:center;border-radius:12px;border:2px solid ${colors[i]}22;background:${colors[i]}06;">
             <div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#888;margin-bottom:8px;">${sc.label || labels[i] || ''}</div>

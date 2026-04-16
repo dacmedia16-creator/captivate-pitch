@@ -314,7 +314,6 @@ export default function AgentNewPresentation() {
         content: {
           owner_expected_price: propData.owner_expected_price ? Number(propData.owner_expected_price) : null,
           scenarios: [
-            { label: "Preço aspiracional", value: result.suggested_ad_price },
             { label: "Preço de mercado", value: result.suggested_market_price },
             { label: "Preço de venda rápida", value: result.suggested_fast_sale_price },
           ],
