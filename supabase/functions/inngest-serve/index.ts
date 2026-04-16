@@ -819,7 +819,7 @@ const marketStudyAnalyze = inngest.createFunction(
 
     // Batch AI extraction: 5 pages per step.run() to stay within timeout
     const AI_BATCH_SIZE = 2;
-    const MAX_AI_PAGES = 15;
+    const MAX_AI_PAGES = 30;
     let aiPages = pagesNeedingAI;
     if (aiPages.length > MAX_AI_PAGES) {
       aiPages = [
