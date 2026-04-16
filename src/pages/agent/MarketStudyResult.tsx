@@ -49,7 +49,17 @@ export default function MarketStudyResult() {
     enabled: !!id,
     refetchInterval: (query) => {
       const d = query.state.data as any;
-      return d?.status === "processing" ? 5000 : false;
+      if (d?.status === "processing") {
+        // Auto-expire stuck studies: if updated_at > 15 min ago, call expire function
+        const updatedAt = d?.updated_at ? new Date(d.updated_at).getTime() : Date.now();
+        if (Date.now() - updatedAt > 15 * 60 * 1000) {
+          supabase.rpc("expire_stuck_studies" as any).then(() => {
+            queryClient.invalidateQueries({ queryKey: ["market-study", id] });
+          });
+        }
+        return 5000;
+      }
+      return false;
     },
   });
 
