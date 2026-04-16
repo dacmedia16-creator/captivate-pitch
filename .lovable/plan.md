@@ -1,41 +1,29 @@
 
 
-# Viva Real: mesmo bug do ZAP/OLX — URL nativa retorna showcase do RJ
+# Remover Viva Real do sistema
 
-## Diagnóstico
+## Alterações
 
-Os discards do Teste 22 confirmam: **todas as 14 URLs do scrape nativo do Viva Real são do Rio de Janeiro** com `source=showcase%2CERROR+PAGE`. É exatamente o mesmo problema que já corrigimos no ZAP e OLX.
-
-A URL nativa gerada é:
+### 1. Database — Desabilitar Viva Real na tabela `portal_sources`
+Migration SQL:
+```sql
+UPDATE portal_sources SET is_global = false WHERE code = 'vivareal';
 ```
-https://www.vivareal.com.br/venda/sp/sorocaba/parque-campolim/apartamentos_residencial/
-```
+Isso remove o Viva Real da lista de portais no UI sem deletar dados históricos.
 
-O Viva Real **não reconhece** esse formato e redireciona para uma página de showcase com anúncios do RJ.
+### 2. `supabase/functions/inngest-serve/index.ts`
+Remover `vivareal` do `PORTAL_SITE_MAP` (linha 123) para que o Google Search não busque mais resultados do Viva Real.
 
-Os resultados do Google Search do Viva Real existem mas são **duplicatas** dos mesmos imóveis já encontrados via ZAP (são o mesmo grupo — ZAP e Viva Real compartilham listagens).
-
-O OLX também não aparece nos resultados — o Google Search aparentemente não retornou nada para OLX Sorocaba.
-
-## Correção
-
-### `supabase/functions/inngest-serve/index.ts`
-
-**Desabilitar URL nativa do Viva Real** — retornar `null` no `buildPortalNativeUrl`:
-
-```typescript
-case "vivareal":
-  return null; // Viva Real redireciona para showcase do RJ com esse formato de URL
-```
-
-Isso elimina as 14 URLs inúteis do RJ e os créditos Firecrawl desperdiçados. Os resultados do Google Search continuam funcionando (mas tendem a ser duplicatas do ZAP).
+As outras referências (patterns de URL, attribution) podem ficar — servem para dados históricos que já existem no banco.
 
 ## Impacto
-- Elimina ~14 URLs desperdiçadas por estudo
-- Economiza créditos Firecrawl (1 scrape nativo + 14 scrapes individuais)
-- Resultados do Viva Real via Google Search continuam habilitados
+- Viva Real não aparece mais no formulário de portais
+- Google Search não busca mais no vivareal.com.br
+- Economiza créditos Firecrawl (eliminando duplicatas ZAP/Viva Real)
+- Dados históricos preservados
 
 ## Escopo
-- 1 linha alterada em `inngest-serve/index.ts`
+- 1 migration (1 UPDATE)
+- 1 linha removida em `inngest-serve/index.ts`
 - Redeploy de 1 edge function
 
