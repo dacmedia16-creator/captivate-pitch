@@ -330,7 +330,7 @@ async function collectUrls(
           });
           if (extractRes.ok) {
             const tc = (await extractRes.json()).choices?.[0]?.message?.tool_calls?.[0];
-            if (tc) { const urls: string[] = JSON.parse(tc.function.arguments).urls || []; if (urls.length > 0) return { urls: [...new Set(urls)].slice(0, 20).map(url => ({ url, title: "", portal, snippet: "native-ai-extract" })), limitation: null }; }
+            if (tc) { const urls: string[] = JSON.parse(tc.function.arguments).urls || []; if (urls.length > 0) return { urls: [...new Set(urls)].slice(0, 30).map(url => ({ url, title: "", portal, snippet: "native-ai-extract" })), limitation: null }; }
           } else { await extractRes.text(); }
         } catch (aiErr) { console.warn(`[INNGEST][FASE 1A] ${portal.name}: AI failed`, aiErr); }
       }
